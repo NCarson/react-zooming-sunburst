@@ -8,13 +8,13 @@
 # Install
 
 ```
-git clone xyz
-cd xyz
-npm i
+npm install
 make
 http-server -g
-
 ```
+![screenshot](https://github.com/NCarson/makefile-react-template/raw/master/Capture.PNG "Logo Title Text 1")
+
+
 # Doc
 See the [tutorial](#tutorial) if you are not familiar with make.
 
