@@ -13,7 +13,6 @@
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-react": "^6.24.1",
     "browserify-global-shim": "^1.0.3",
-    "jquery": "^1.9.1",
     "popper.js": "^1.14.3",
     "puppeteer": "^1.6.1",
     "react": "^16.4.1",
