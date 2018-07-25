@@ -2,8 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { Component } from 'react';
-import { Collapse, Card, CardImg, CardText, CardBody, CardTitle, CardSubtitle, Button } from 'reactstrap';
-
+import { Collapse, Card, CardBody,  Button } from 'reactstrap';
 
 class App extends Component {
   constructor(props) {
@@ -23,10 +22,7 @@ class App extends Component {
         <Collapse isOpen={this.state.collapse}>
           <Card>
             <CardBody>
-            Anim pariatur cliche reprehenderit,
-             enim eiusmod high life accusamus terry richardson ad squid. Nihil
-             anim keffiyeh helvetica, craft beer labore wes anderson cred
-             nesciunt sapiente ea proident.
+                Hello React, Makefile, and reactstrap!
             </CardBody>
           </Card>
         </Collapse>
@@ -39,7 +35,6 @@ ReactDOM.render(
     <div id='hello'>
 		<App />
     </div>
-
     , document.querySelector('#app')
 );
 

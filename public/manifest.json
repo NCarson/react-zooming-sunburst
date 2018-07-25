@@ -1,0 +1,22 @@
+
+{
+  "short_name": "Test",
+  "name": "Test Template",
+  "icons": [
+    {
+      "src": "/img/test.svg",
+      "type": "image/svg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/img/test.svg",
+      "type": "image/svg",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "gray",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "gray"
+}

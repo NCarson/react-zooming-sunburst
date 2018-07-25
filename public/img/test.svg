@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="875.0386" height="307.5186" viewBox="0 0 875.0386 307.5186">
+  <defs>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css?family=Sonsie+One');
+      text {
+        font-size: 290.4976px;
+        font-family: "Sonsie One";
+      }
+    </style>
+  </defs>
+  <title>test</title>
+  <text transform="translate(0 222.4121)">Test</text>
+</svg>

@@ -1,42 +1,40 @@
-# Makefile for transpiling with Babel in a Node app, or in a client- or
-# server-side shared library.
-#
-#
-# Based on this gist:
+# beginning based on this gist:
 # https://gist.github.com/hallettj/29b8e7815b264c88a0a0ee9dcddb6210
 
 # good stuff on cdn browserify
 # https://shinglyu.github.io/web/2018/02/08/minimal-react-js-without-a-build-step-updated.html
-
-CDN_LIBS := react react-dom reactstrap popper.js fbjs react-popper prop-types react-lifecycles-compat classnames
-
-INDEX_DIR := public
-DIST_DIR := $(INDEX_DIR)/dist
-LIB_DIR := lib
-SRC_DIR := src
-TARGET := $(DIST_DIR)/bundle.js
-VENDOR:= $(DIST_DIR)/vendor.js
-DEP_FILE := $(LIB_DIR)/.deps
-
-#FIXME does not work
-#ifndef NODE_ENV
-#	TARGETS=$(TARGET).min.gz $(VENDOR).min.gz
-#else
-#	# uglifyjs requires the bundle to built anyway
-#	TARGETS=$(TARGET).gz $(VENDOR).gz
-#endif
-
-# production minimized targets
-#TARGETS := $(patsubst %.js,%.min.js.gz, $(TARGET) $(VENDOR)) 
-TARGETS := $(TARGET) $(VENDOR)
-
-TARGET_BUILT := $(notdir $(TARGET))
-VENDOR_BUILT := $(notdir $(VENDOR))
-
+ 
+# these should be installed globally
 BABEL := babel --plugins transform-react-jsx  --presets=es2015,react
 BROWSERIFY := browserify
 UGLIFYJS := uglifyjs
+NUNJUCKS := nunjucks
 GZIP := gzip
+
+# directory strucrue
+INDEX_DIR := public
+DIST_DIR := $(INDEX_DIR)/dist
+TEMPL_DIR := templates
+LIB_DIR := lib
+SRC_DIR := src
+DEP_FILE := $(LIB_DIR)/.deps
+
+#CDN libs will be excluded from the vender build
+# but you have to set them up yourself
+REACTSTRAP_LIBS := reactstrap popper.js fbjs react-popper prop-types \
+	react-lifecycles-compat classnames lodash.isfunction lodash.tonumber lodash.isobject
+CDN_LIBS := react react-dom $(REACTSTRAP_LIBS) object-assign
+
+# do not minify if were in dev
+ifeq ($(NODE_ENV),"development")
+	TARGET := $(DIST_DIR)/bundle.js
+	VENDOR:= $(DIST_DIR)/vendor.js
+else
+	TARGET := $(DIST_DIR)/bundle.min.js
+	VENDOR:= $(DIST_DIR)/vendor.min.js
+endif
+
+TARGETS := $(TARGET).gz $(VENDOR).gz
 
 EXC_MODULES := python3 script/get_modules.py `pwd`/node_modules/ $(DEP_FILE) "-x="
 INC_MODULES := python3 script/get_modules.py `pwd`/node_modules/ $(DEP_FILE) "-r=" "$(CDN_LIBS)"
@@ -65,13 +63,8 @@ FLOW_FILES := $(patsubst %.js,%.js.flow,$(TRANSPIELD_FILES))
 
 .PHONY: all clean clean_dist
 
-# make the vender and target bundles
+# make the vendor and target bundles
 all: $(INDEX_DIR)/index.html
-
-$(INDEX_DIR)/index.html: $(TARGETS) $(INDEX_DIR)/index.jinja
-	echo '{ "vendor": "$(VENDOR_BUILT)?$(shell cat $(LIB_DIR)/.vendor.time)", "bundle": "$(TARGET_BUILT)?$(shell cat $(LIB_DIR)/.bundle.time)" }' \
-		> $(INDEX_DIR)/index.json
-	nunjucks $(INDEX_DIR)/index.jinja $(INDEX_DIR)/index.json
 
 # remove the build lib and dist files
 clean:
@@ -84,8 +77,16 @@ clean:
 clean_dist:
 	rm $(DIST_DIR)/* -fr 
 
+# how big the _required_ node_module dirs are
 vender_size:
 	du -hsc $(shell python3 script/get_modules.py `pwd`/node_modules/ $(DEP_FILE) | sed 's/[^ ]* */node_modules\/&/g') | sort -h
+
+$(INDEX_DIR)/index.html: $(TARGETS) $(TEMPL_DIR)/index.jinja
+	echo '{ "vendor": "$(notdir $(VENDOR))?$(shell cat $(LIB_DIR)/.vendor.time)", "bundle": "$(notdir $(TARGET))?$(shell cat $(LIB_DIR)/.bundle.time)" }' \
+		> $(TEMPL_DIR)/index.json
+	$(NUNJUCKS) $(TEMPL_DIR)/index.jinja $(TEMPL_DIR)/index.json
+	mv $(TEMPL_DIR)/index.html $(INDEX_DIR)
+	#$(GZIP) $< --stdout > $(INDEX_DIR)/index.html.gz
 
 %.gz: %
 	$(GZIP) $< --stdout > $@
