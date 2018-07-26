@@ -21,9 +21,11 @@ DEP_FILE := $(LIB_DIR)/.deps
 
 #CDN libs will be excluded from the vender build
 # but you have to set them up yourself
+
 REACTSTRAP_LIBS := reactstrap popper.js fbjs react-popper prop-types \
 	react-lifecycles-compat classnames lodash.isfunction lodash.tonumber lodash.isobject
 CDN_LIBS := react react-dom $(REACTSTRAP_LIBS) object-assign
+CDN_URLS := <script src='https://unpkg.com/react@16.4.1/umd/react.production.min.js'></script><script src='https://unpkg.com/react-dom@16.4.1/umd/react-dom.production.min.js'></script><script src='https://unpkg.com/reactstrap@6.3.0/dist/reactstrap.full.min.js'></script>
 
 # do not minify if were in dev
 ifeq ($(NODE_ENV),"development")
@@ -33,6 +35,7 @@ else
 	TARGET := $(DIST_DIR)/bundle.min.js
 	VENDOR:= $(DIST_DIR)/vendor.min.js
 endif
+
 
 TARGETS := $(TARGET).gz $(VENDOR).gz
 
@@ -82,7 +85,7 @@ vender_size:
 	du -hsc $(shell python3 script/get_modules.py `pwd`/node_modules/ $(DEP_FILE) | sed 's/[^ ]* */node_modules\/&/g') | sort -h
 
 $(INDEX_DIR)/index.html: $(TARGETS) $(TEMPL_DIR)/index.jinja
-	echo '{ "vendor": "$(notdir $(VENDOR))?$(shell cat $(LIB_DIR)/.vendor.time)", "bundle": "$(notdir $(TARGET))?$(shell cat $(LIB_DIR)/.bundle.time)" }' \
+	echo '{ "vendor": "$(notdir $(VENDOR))?$(shell cat $(LIB_DIR)/.vendor.time)", "bundle": "$(notdir $(TARGET))?$(shell cat $(LIB_DIR)/.bundle.time)",  "cdn_urls": "$(CDN_URLS)"}' \
 		> $(TEMPL_DIR)/index.json
 	$(NUNJUCKS) $(TEMPL_DIR)/index.jinja $(TEMPL_DIR)/index.json
 	mv $(TEMPL_DIR)/index.html $(INDEX_DIR)

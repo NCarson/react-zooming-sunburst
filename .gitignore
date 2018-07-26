@@ -4,3 +4,4 @@ public/index.html
 public/index.json
 public/dist
 templates/index.json
+*.swp
