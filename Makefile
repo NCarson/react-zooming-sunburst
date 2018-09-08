@@ -88,26 +88,12 @@ ifdef NODE_DEV
 	CDN_URLS := <script src='https://unpkg.com/prop-types@15.6.2/prop-types.min.js'></script> \
 		<script src='https://unpkg.com/react@16.4.1/umd/react.development.js'></script> \
 		<script src='https://unpkg.com/react-dom@16.4.1/umd/react-dom.development.js'></script> \
-		<script src='https://unpkg.com/reactstrap@6.4.0/dist/reactstrap.full.js'></script> \
-		<script src='https://unpkg.com/axios@0.18.0/dist/axios.min.js'></script> \
-		<script src='https://unpkg.com/react-router@4.3.1/umd/react-router.min.js'></script> \
-		<script src='https://unpkg.com/react-router-dom@4.3.1/umd/react-router-dom.min.js'></script> \
-		<script src='https://unpkg.com/urijs@1.19.1/src/URI.min.js'></script> \
-		<script src='https://unpkg.com/cm-chessboard-es5@2.11.2-6.4/dist/cm-chessboard.umd.js'></script> \
-		<script src='https://unpkg.com/react-autowhatever@10.1.2/dist/standalone/autowhatever.min.js'></script> \
-		<script src='https://unpkg.com/react-autosuggest@9.4.0/dist/standalone/autosuggest.min.js'></script>
+		<script src='https://unpkg.com/reactstrap@6.4.0/dist/reactstrap.full.js'></script> 
 else
 	CDN_URLS := <script src='https://unpkg.com/prop-types@15.6.2/prop-types.min.js'></script> \
 		<script src='https://unpkg.com/react@16.4.1/umd/react.production.min.js'></script> \
 		<script src='https://unpkg.com/react-dom@16.4.1/umd/react-dom.production.min.js'></script> \
-		<script src='https://unpkg.com/reactstrap@6.4.0/dist/reactstrap.full.min.js'></script> \
-		<script src='https://unpkg.com/axios@0.18.0/dist/axios.min.js'></script> \
-		<script src='https://unpkg.com/react-router@4.3.1/umd/react-router.min.js'></script> \
-		<script src='https://unpkg.com/react-router-dom@4.3.1/umd/react-router-dom.min.js'></script> \
-		<script src='https://unpkg.com/urijs@1.19.1/src/URI.min.js'></script> \
-		<script src='https://unpkg.com/cm-chessboard-es5@2.11.2-6.4/dist/cm-chessboard.umd.js'></script> \
-		<script src='https://unpkg.com/react-autowhatever@10.1.2/dist/standalone/autowhatever.min.js'></script> \
-		<script src='https://unpkg.com/react-autosuggest@9.4.0/dist/standalone/autosuggest.min.js'></script>
+		<script src='https://unpkg.com/reactstrap@6.4.0/dist/reactstrap.full.min.js'></script> 
 endif
 
 ###############################################################################
@@ -147,6 +133,7 @@ install:
 
 .PRECIOUS: $(INDEX_DIR)/index.html
 $(INDEX_DIR)/index.html: $(TEMPL_DIR)/index.jinja
+	touch $(IDX_JSON)
 	jq '.cdn_urls = "$(CDN_URLS)"' $(IDX_JSON) | sponge $(IDX_JSON)
 	$(NUNJUCKS) $(TEMPL_DIR)/index.jinja $(TEMPL_DIR)/index.json
 	mv $(TEMPL_DIR)/index.html $(INDEX_DIR)

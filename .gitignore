@@ -5,3 +5,6 @@ public/index.json
 public/dist
 templates/index.json
 *.swp
+
+react-zoomable-sunburst-d3-v4
+sunburst-chart
