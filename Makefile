@@ -5,7 +5,7 @@
 # https://shinglyu.github.io/web/2018/02/08/minimal-react-js-without-a-build-step-updated.html
 #
 
-#NODE_DEV=1
+NODE_DEV=1
 
 #FLAGS:
 # NO_LINT: if defined - will not call eslint
@@ -13,6 +13,8 @@
 
 # make sure failed commands dont leave files
 .DELETE_ON_ERROR: 
+
+FAKING_IT := $(shell ruby script/test_config.rb $(NODE_DEV))
  
 ###############################################################################
 # commands
@@ -45,6 +47,7 @@ TEMPL_DIR := templates
 LIB_DIR := lib
 SRC_DIR := src
 PROD_DIR := /var/www/html
+IDX_JSON := templates/index.json
 
 DEP_FILE := $(LIB_DIR)/.deps
 SRC_FILES := $(shell find $(SRC_DIR)/ -name '*.js')
@@ -55,14 +58,14 @@ COMPRESS_FILES := $(shell find $(INDEX_DIR)/ -name '*.svg' -o -name '*.html' -o 
 COMPRESS_FILES_GZ := $(patsubst %,%.gz,$(COMPRESS_FILES))
 
 #libs that should not go in vendor build
-BROKEN_LIBS := shallow-equal inline-style-prefixer
+BROKEN_LIBS := shallow-equal inline-style-prefixer @nivo
 #CDN libs will be excluded from the vender build
 # but you have to set them up yourself
 #
 REACTSTRAP_LIBS := reactstrap classnames lodash.isfunction lodash.isobject \
 	lodash.tonumber react-lifecycles-compat react-popper react-transition-group
 
-CDN_LIBS := $(BROKEN_LIBS) react react-dom $(REACTSTRAP_LIBS) \ object-assign babel-runtime axios \ react-router react-router-dom urijs \ cm-chessboard-es5 react-autowhatever react-autosuggest \
+CDN_LIBS := $(BROKEN_LIBS) react-dom $(REACTSTRAP_LIBS) \ object-assign babel-runtime axios \ react-router react-router-dom urijs \ cm-chessboard-es5 react-autowhatever react-autosuggest \
 	react-themable
 
 EXC_MODULES := python3 script/get_modules.py `pwd`/node_modules/ $(DEP_FILE) "-x="
@@ -144,30 +147,35 @@ install:
 
 .PRECIOUS: $(INDEX_DIR)/index.html
 $(INDEX_DIR)/index.html: $(TEMPL_DIR)/index.jinja
-	echo '{ "cdn_urls": "$(CDN_URLS)"}' > $(TEMPL_DIR)/index.json
+	jq '.cdn_urls = "$(CDN_URLS)"' $(IDX_JSON) | sponge $(IDX_JSON)
 	$(NUNJUCKS) $(TEMPL_DIR)/index.jinja $(TEMPL_DIR)/index.json
 	mv $(TEMPL_DIR)/index.html $(INDEX_DIR)
 
+
 %.gz: %
 	$(GZIP) $< --stdout > $@
+	jq '.static_time = "$(shell date +%s)"' $(IDX_JSON) | sponge $(IDX_JSON)
 
 .PRECIOUS: %.min.js #make will delete these as 'intermediate' without this
 %.min.js: %.js
 ifdef NODE_DEV
-	ln -s $< $@
+	#we cant link because of gzip 
+	#ln -s $< $@
+	cp $< $@
 else
 	$(UGLIFYJS) -cmo $@ $<
 endif
 
-$(TARGET): $(LIB_FILES) $(DEP_FILE) 
+$(TARGET): $(LIB_DIR)/config.js $(LIB_FILES) $(DEP_FILE) 
 	$(BROWSERIFY) $(BROWSERIFY_SHIM) -d -o $(TARGET)  $(shell find $(LIB_DIR) -type f -name '*.js') $(shell $(EXC_MODULES))
 	echo $(shell date +%s) > $(LIB_DIR)/.bundle.time
+	jq '.bundle_time = "$(shell date +%s)"' $(IDX_JSON) | sponge $(IDX_JSON)
 
 # depends if the node_moules changed
 # XXX not really true; app code may or may not have included or removed vendor dependencies
 $(VENDOR): $(DEP_FILE)
 	$(BROWSERIFY) $(BROWSERIFY_SHIM) $(shell $(INC_MODULES)) > $(VENDOR)
-	echo $(shell date +%s) > $(LIB_DIR)/.vendor.time
+	jq '.vendor_time = "$(shell date +%s)"' $(IDX_JSON) | sponge $(IDX_JSON)
 
 $(DEP_FILE): package-lock.json
 	$(BROWSERIFY) --list $(shell find lib/ -type f -name '*.js') > $(LIB_DIR)/.deps
@@ -177,4 +185,11 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 	$(LINTER) $<
 	mkdir $(dir $@) -p
 	$(BABEL) $< --out-file $@ --source-maps
+
+$(SRC_DIR)/config.js:
+ifdef NODE_DEV
+	cd src && ln -s ../config.dev.js config.js
+else
+	cd src && ln -s ../config.prod.js config.js
+endif
 
