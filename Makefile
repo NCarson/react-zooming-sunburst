@@ -132,7 +132,7 @@ install:
 ###############################################################################
 
 .PRECIOUS: $(INDEX_DIR)/index.html
-$(INDEX_DIR)/index.html: $(TEMPL_DIR)/index.jinja
+$(INDEX_DIR)/index.html: $(TEMPL_DIR)/index.jinja $(IDX_JSON)
 	touch $(IDX_JSON)
 	jq '.cdn_urls = "$(CDN_URLS)"' $(IDX_JSON) | sponge $(IDX_JSON)
 	$(NUNJUCKS) $(TEMPL_DIR)/index.jinja $(TEMPL_DIR)/index.json

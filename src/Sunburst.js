@@ -14,136 +14,170 @@ import * as d3 from 'd3';
  * height => Integer - Height of the Chart Container *
  */
 
+
+
 class Sunburst extends React.Component {
-    componentDidMount() {
-        this.renderSunburst(this.props);
+
+    constructor(props) {
+        super(props);
+
+        const w = this.props.width
+        const h = this.props.height
+
+        this.radius = (Math.min(w, h) / 2) - 10
+        this.x = d3.scaleLinear().range([0, 2 * Math.PI])
+        this.y = this.props.scale === 'linear' ? d3.scaleLinear().range([0, this.radius]) : d3.scaleSqrt().range([0, this.radius])
+        this.partition = d3.partition()
+
+        this.arc = d3.arc()
+            .startAngle(d => Math.max(0, Math.min(2 * Math.PI, this.x(d.x0))))
+            .endAngle(d => Math.max(0, Math.min(2 * Math.PI, this.x(d.x1))))
+            .innerRadius(d => Math.max(0, this.y(d.y0)))
+            .outerRadius(d => Math.max(0, this.y(d.y1)))
+
+        this.hueDXScale = d3.scaleLinear()
+            .domain([0, 1])
+            .range([0, 360])
+
+        this.rootData = null
+        this.svg = null
+        this.firstBuild = null
+        this.node = null
+        this.tooltipDom = null
     }
+
+    componentDidMount() {
+        this.update();
+    }
+
     UNSAFE_componentWillReceiveProps(nextProps) {
         if (!isEqual(this.props, nextProps)) {
-            this.renderSunburst(nextProps);
+            this.update(nextProps);
         }
     }
-    arcTweenData(a, i, node, x, arc) {    // eslint-disable-line
+
+    // figures out the arc length for a node
+    _arcTweenData(a, i, node) {    // eslint-disable-line
         const oi = d3.interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0) }, a);
-        function tween(t) {
+        function _tween(t) {
             const b = oi(t);
             a.x0s = b.x0;     // eslint-disable-line
             a.x1s = b.x1;     // eslint-disable-line
-            return arc(b);
+            return this.arc(b);
         }
+        var tween = _tween.bind(this)
         if (i === 0) {
-            const xd = d3.interpolate(x.domain(), [node.x0, node.x1]);
+            const xd = d3.interpolate(this.x.domain(), [this.node.x0, this.node.x1]);
             return function (t) {
-                x.domain(xd(t));
+                this.x.domain(xd(t));
                 return tween(t);
-            };
+            }.bind(this);
         } else {    // eslint-disable-line
             return tween;
         }
     }
-    update(root, firstBuild, svg, partition, hueDXScale, x, y, radius, arc, node, self) {    // eslint-disable-line
-        if (firstBuild) {
-            firstBuild = false; // eslint-disable-line
-            function arcTweenZoom(d) { // eslint-disable-line
-                const xd = d3.interpolate(x.domain(), [d.x0, d.x1]), // eslint-disable-line
-                    yd = d3.interpolate(y.domain(), [d.y0, 1]),
-                    yr = d3.interpolate(y.range(), [d.y0 ? 40 : 0, radius]);
-                return function (data, i) {
-                    return i
-                            ? () => arc(data)
-                            : (t) => { x.domain(xd(t)); y.domain(yd(t)).range(yr(t)); return arc(data); };
-                };
-            }
-            function click(d) { // eslint-disable-line
-                node = d; // eslint-disable-line
-                self.props.onSelect && self.props.onSelect(d);
-                svg.selectAll('path').transition().duration(1000).attrTween('d', arcTweenZoom(d));
-            }
-            const tooltipContent = self.props.tooltipContent;
-            const tooltip = d3.select(`#${self.props.keyId}`)
-                .append(tooltipContent ? tooltipContent.type : 'div')
-                .style('position', 'absolute')
-                .style('z-index', '10')
-                .style('opacity', '0');
-            if (tooltipContent) {
-                Object.keys(tooltipContent.props).forEach((key) => {
-                    tooltip.attr(key, tooltipContent.props[key]);
-                });
-            }
-            svg.selectAll('path').data(partition(root).descendants()).enter().append('path')
-            .style('fill', (d) => {
-                let hue;
-                const current = d;
-                if (current.depth === 0) {
-                    return '#33cccc';
-                }
-                if (current.depth <= 1) {
-                    hue = hueDXScale(d.x0);
-                    current.fill = d3.hsl(hue, 0.5, 0.6);
-                    return current.fill;
-                }
-                current.fill = current.parent.fill.brighter(0.5);
-                const hsl = d3.hsl(current.fill);
-                hue = hueDXScale(current.x0);
-                const colorshift = hsl.h + (hue / 4);
-                return d3.hsl(colorshift, hsl.s, hsl.l);
-            })
-            .attr('stroke', '#fff')
-            .attr('stroke-width', '1')
-            .on('click', d => click(d, node, svg, self, x, y, radius, arc))
-            .on('mouseover', function (d) {
-                if (self.props.tooltip) {
-                    d3.select(this).style('cursor', 'pointer');
-                    tooltip.html(() => { const name = d; return name; });
-                    return tooltip.transition().duration(50).style('opacity', 1);
-                }
-                return null;
-            })
-            .on('mousemove', () => {
-                if (self.props.tooltip) {
-                    tooltip
-                        .style('top', `${d3.event.pageY - 50}px`)
-                        .style('left', `${self.props.tooltipPosition === 'right' ? d3.event.pageX - 100 : d3.event.pageX - 50}px`);
-                }
-                return null;
-            })
-            .on('mouseout', function () {
-                if (self.props.tooltip) {
-                    d3.select(this).style('cursor', 'default');
-                    tooltip.transition().duration(50).style('opacity', 0);
-                }
-                return null;
+
+
+    _arcTweenZoom(d) {
+        const xd = d3.interpolate(this.x.domain(), [d.x0, d.x1]), // eslint-disable-line
+            yd = d3.interpolate(this.y.domain(), [d.y0, 1]),
+            yr = d3.interpolate(this.y.range(), [d.y0 ? 40 : 0, this.radius]);
+        return function (data, i) {
+            return i
+                    ? () => this.arc(data)
+                    : (t) => { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); return this.arc(data); };
+        };
+    }
+
+    _onClick(d) {
+        this.props.onSelect && this.props.onSelect(d);
+        this.svg.selectAll('path').transition().duration(1000).attrTween('d', this._arcTweenZoom(d).bind(this));
+    }
+
+    _setTooltipCallbacks() {
+
+        const tooltipContent = this.props.tooltipContent;
+        this.tooltipDom = d3.select(`#${this.props.keyId}`)
+            .append(tooltipContent ? tooltipContent.type : 'div')
+            .style('position', 'absolute')
+            .style('z-index', '10')
+            .style('opacity', '0')
+
+        if (tooltipContent) {
+            Object.keys(tooltipContent.props).forEach((key) => {
+                this.tooltipDom.attr(key, tooltipContent.props[key]);
             });
+        }
+
+        this.svg.on('mouseover', function (d, i, n) {
+            if (!d)
+                return null
+
+                if (this.props.tooltip) {
+                    d3.select(n[i]).style('cursor', 'pointer');
+                    this.tooltipDom.html(() => { const name = d; return name; });
+                    return this.tooltipDom.transition().duration(50).style('opacity', 1);
+                }
+                return null;
+            }.bind(this))
+            .on('mousemove', function () {
+                if (this.props.tooltip) {
+                    this.tooltipDom
+                        .style('top', `${d3.event.pageY - 50}px`)
+                        .style('left', `${this.props.tooltipPosition === 'right' ? d3.event.pageX - 100 : d3.event.pageX - 50}px`);
+                }
+                return null;
+            }.bind(this))
+            .on('mouseout', function (d, i, n) {
+                if (this.props.tooltip) {
+                    d3.select(n[i]).style('cursor', 'default');
+                    this.tooltipDom.transition().duration(50).style('opacity', 0);
+                }
+                return null;
+            }.bind(this));
+}
+
+    _firstFill() {
+        this.svg.selectAll('path').data(this.partition(this.rootData).descendants()).enter().append('path')
+        .style('fill', (d) => {
+            let hue;
+            const current = d;
+            if (current.depth === 0) {
+                return '#33cccc';
+            }
+            if (current.depth <= 1) {
+                hue = this.hueDXScale(d.x0);
+                current.fill = d3.hsl(hue, 0.5, 0.6);
+                return current.fill;
+            }
+            current.fill = current.parent.fill.brighter(0.5);
+            const hsl = d3.hsl(current.fill);
+            hue = this.hueDXScale(current.x0);
+            const colorshift = hsl.h + (hue / 4);
+            return d3.hsl(colorshift, hsl.s, hsl.l);
+        })
+        .attr('stroke', '#fff')
+        .attr('stroke-width', '1')
+        .on('click', this._onClick.bind(this))
+    }
+
+    update() {
+        this.rootData = d3.hierarchy(this.props.data);
+        this.svg = d3.select('svg').append('g').attr('transform', `translate(${this.props.width / 2},${this.props.height / 2})`)
+        this.firstBuild = true;
+        this.node = this.rootData;
+        this.rootData.sum(d => d.size);
+
+        if (this.firstBuild) {
+            this.firstBuild = false
+            this._firstFill()
+            this._setTooltipCallbacks()
         } else {
-            svg.selectAll('path').data(partition(root).descendants());
+            this.svg.selectAll('path').data(this.partition(this.rootData).descendants());
         }
-        svg.selectAll('path').transition().duration(1000).attrTween('d', (d, i) => self.arcTweenData(d, i, node, x, arc));
+        this.svg.selectAll('path').transition().duration(1000).attrTween('d', (d, i) => this._arcTweenData(d, i));
     }
-    renderSunburst(props) {
-        if (props.data) {
-            const self = this, // eslint-disable-line
-                gWidth = props.width,
-                gHeight = props.height,
-                radius = (Math.min(gWidth, gHeight) / 2) - 10,
-                svg = d3.select('svg').append('g').attr('transform', `translate(${gWidth / 2},${gHeight / 2})`),
-                x = d3.scaleLinear().range([0, 2 * Math.PI]),
-                y = props.scale === 'linear' ? d3.scaleLinear().range([0, radius]) : d3.scaleSqrt().range([0, radius]),
-                partition = d3.partition(),
-                arc = d3.arc()
-                    .startAngle(d => Math.max(0, Math.min(2 * Math.PI, x(d.x0))))
-                    .endAngle(d => Math.max(0, Math.min(2 * Math.PI, x(d.x1))))
-                    .innerRadius(d => Math.max(0, y(d.y0)))
-                    .outerRadius(d => Math.max(0, y(d.y1))),
-                hueDXScale = d3.scaleLinear()
-                    .domain([0, 1])
-                    .range([0, 360]),
-                rootData = d3.hierarchy(props.data);
-            const firstBuild = true;
-            const node = rootData;
-            rootData.sum(d => d.size);
-            self.update(rootData, firstBuild, svg, partition, hueDXScale, x, y, radius, arc, node, self); // GO!
-        }
-    }
+
     render() {
         return (
             <div id={this.props.keyId} className="text-center">
