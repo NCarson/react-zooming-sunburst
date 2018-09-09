@@ -1,22 +1,38 @@
 import React from 'react';
 import { isEqual } from 'lodash/lang';
 import * as d3 from 'd3';
-//import * as utils from './utils';
-/**
- * Sunburst Chart React Stateless Component with the following allowable Props *
- * data => JSON Array - Typically same for every Sunburst Chart *
- * scale => String - Options: linear | exponential - Linear renders each arc with same radii, Exponential reduces gradually by SquareRoot *
- * onSelect => Function - Called on Arc Click for re-rendering the chart and passing back to User as props *
- * tooltip => Boolean - Display Tooltip or not *
- * tooltipContent => HTMLNode - Customized Node for Tooltip rendering *
- * keyId => String - Unique Id for Chart SVG *
- * width => Integer - Width of the Chart Container *
- * height => Integer - Height of the Chart Container *
- */
+import PropTypes from 'prop-types'
 
-
+/*
+https://github.com/mojoaxel/d3-sunburst
+https://github.com/ebemunk/chess-dataviz
+https://github.com/ArbaazDossani/react-zoomable-sunburst-d3-v4
+*/
 
 class Sunburst extends React.Component {
+
+    static propTypes = {
+        data: PropTypes.object.isRequired,
+        width: PropTypes.string.isRequired,
+        height: PropTypes.string.isRequired,
+
+		// requried /w/ default
+        domId: PropTypes.string,
+        scale: PropTypes.string.isRequired,
+        tooltip: PropTypes.bool.isRequired,
+        tooltipFormatter: PropTypes.func.isRequired,
+
+        onSelect: PropTypes.func,
+        onMouseover: PropTypes.func,
+        onMouseout: PropTypes.func,
+    }
+
+    static defaultProps = {
+        domId:'sunburst-container',
+        scale:'linear',
+        tooltip: true,
+        tooltipFormatter: (data) => data.name
+    }
 
     constructor(props) {
         super(props);
@@ -56,6 +72,46 @@ class Sunburst extends React.Component {
         }
     }
 
+    _setTooltipCallbacks() {
+
+        this.tooltipDom = d3.select(`#${this.props.domId}`)
+            .append('div')
+			.attr('class', 'sunburst-tooltip')
+            .style('position', 'absolute')
+            .style('z-index', '10')
+            .style('opacity', '0')
+            .style('text-align', 'center')
+            .style('border-radius', '8px')
+            .style('pointer-events', 'none')
+            .style('background', 'lightsteelblue')
+            .style('padding', '3px')
+
+        this.svg.selectAll('path')
+            .on("mouseover", function(d) {		
+                if (this.props.tooltip) {
+                    this.tooltipDom.transition()		
+                        .duration(200)		
+                        .style("opacity", .9);		
+                    this.tooltipDom.html((this.props.tooltipFormatter(d.data)))
+                        .style("left", (d3.event.pageX) + "px")		
+                        .style("top", (d3.event.pageY - 28) + "px")
+                }
+                this.props.onMouseover && this.props.onMouseover(d);
+
+            }.bind(this))					
+            .on("mouseout", function(d) {		
+                this.props.tooltip && this.tooltipDom.transition()		
+                    .duration(500)		
+                    .style("opacity", 0);	
+                this.props.onMouseout && this.props.onMouseout(d);
+            }.bind(this));
+    }
+
+    _onClick(d) {
+        this.props.onSelect && this.props.onSelect(d);
+        this.svg.selectAll('path').transition().duration(1000).attrTween('d', this._arcTweenZoom(d).bind(this));
+    }
+
     // figures out the arc length for a node
     _arcTweenData(a, i, node) {    // eslint-disable-line
         const oi = d3.interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0) }, a);
@@ -77,7 +133,6 @@ class Sunburst extends React.Component {
         }
     }
 
-
     _arcTweenZoom(d) {
         const xd = d3.interpolate(this.x.domain(), [d.x0, d.x1]), // eslint-disable-line
             yd = d3.interpolate(this.y.domain(), [d.y0, 1]),
@@ -88,54 +143,6 @@ class Sunburst extends React.Component {
                     : (t) => { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); return this.arc(data); };
         };
     }
-
-    _onClick(d) {
-        this.props.onSelect && this.props.onSelect(d);
-        this.svg.selectAll('path').transition().duration(1000).attrTween('d', this._arcTweenZoom(d).bind(this));
-    }
-
-    _setTooltipCallbacks() {
-
-        const tooltipContent = this.props.tooltipContent;
-        this.tooltipDom = d3.select(`#${this.props.keyId}`)
-            .append(tooltipContent ? tooltipContent.type : 'div')
-            .style('position', 'absolute')
-            .style('z-index', '10')
-            .style('opacity', '0')
-
-        if (tooltipContent) {
-            Object.keys(tooltipContent.props).forEach((key) => {
-                this.tooltipDom.attr(key, tooltipContent.props[key]);
-            });
-        }
-
-        this.svg.on('mouseover', function (d, i, n) {
-            if (!d)
-                return null
-
-                if (this.props.tooltip) {
-                    d3.select(n[i]).style('cursor', 'pointer');
-                    this.tooltipDom.html(() => { const name = d; return name; });
-                    return this.tooltipDom.transition().duration(50).style('opacity', 1);
-                }
-                return null;
-            }.bind(this))
-            .on('mousemove', function () {
-                if (this.props.tooltip) {
-                    this.tooltipDom
-                        .style('top', `${d3.event.pageY - 50}px`)
-                        .style('left', `${this.props.tooltipPosition === 'right' ? d3.event.pageX - 100 : d3.event.pageX - 50}px`);
-                }
-                return null;
-            }.bind(this))
-            .on('mouseout', function (d, i, n) {
-                if (this.props.tooltip) {
-                    d3.select(n[i]).style('cursor', 'default');
-                    this.tooltipDom.transition().duration(50).style('opacity', 0);
-                }
-                return null;
-            }.bind(this));
-}
 
     _firstFill() {
         this.svg.selectAll('path').data(this.partition(this.rootData).descendants()).enter().append('path')
@@ -171,17 +178,17 @@ class Sunburst extends React.Component {
         if (this.firstBuild) {
             this.firstBuild = false
             this._firstFill()
-            this._setTooltipCallbacks()
         } else {
             this.svg.selectAll('path').data(this.partition(this.rootData).descendants());
         }
         this.svg.selectAll('path').transition().duration(1000).attrTween('d', (d, i) => this._arcTweenData(d, i));
+        this._setTooltipCallbacks()
     }
 
     render() {
         return (
-            <div id={this.props.keyId} className="text-center">
-                <svg style={{ width: parseInt(this.props.width, 10) || 480, height: parseInt(this.props.height, 10) || 400 }} id={`${this.props.keyId}-svg`} />
+            <div id={this.props.domId}>
+                <svg style={{ width: parseInt(this.props.width, 10) || 480, height: parseInt(this.props.height, 10) || 400 }} id={`${this.props.domId}-svg`} />
             </div>
         );
     }
