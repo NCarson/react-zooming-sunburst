@@ -1,9 +1,5 @@
 
 const blacklist = [
-    'Fetcher',
-    'Search',
-    'chessboard',
-    'Adapter',
 ]
 
 function mylog(msg) {
@@ -20,16 +16,7 @@ function mylog(msg) {
 }
 
 var Config = {
-    host : 'https://chessindex.org',
-    api_host : 'https://api.chessindex.org',
-
-    pagination : 20,
-    api_timeout : 3000,
-
     log : mylog,
-    warn: function() { console.warn.apply(console, arguments) },
-
-    googlebot_debug: true,
 }
 
 export default Config
