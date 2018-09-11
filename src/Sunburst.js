@@ -1,7 +1,14 @@
 import React from 'react';
 import { isEqual } from 'lodash/lang';
-import * as d3 from 'd3';
 import PropTypes from 'prop-types'
+
+import { hsl } from 'd3-color';
+import { scaleLinear, scaleSqrt } from 'd3-scale';
+import { select, event } from 'd3-selection';
+import { hierarchy, partition } from 'd3-hierarchy';
+import { arc } from 'd3-shape';
+import { interpolate } from 'd3-interpolate';
+import { transition } from 'd3-transition'; // eslint-disable-line no-unused-vars
 
 /*
 https://github.com/mojoaxel/d3-sunburst
@@ -41,17 +48,17 @@ class Sunburst extends React.Component {
         const h = this.props.height
 
         this.radius = (Math.min(w, h) / 2) - 10
-        this.x = d3.scaleLinear().range([0, 2 * Math.PI])
-        this.y = this.props.scale === 'linear' ? d3.scaleLinear().range([0, this.radius]) : d3.scaleSqrt().range([0, this.radius])
-        this.partition = d3.partition()
+        this.x = scaleLinear().range([0, 2 * Math.PI])
+        this.y = this.props.scale === 'linear' ? scaleLinear().range([0, this.radius]) : scaleSqrt().range([0, this.radius])
+        this.partition = partition()
 
-        this.arc = d3.arc()
+        this.arc = arc()
             .startAngle(d => Math.max(0, Math.min(2 * Math.PI, this.x(d.x0))))
             .endAngle(d => Math.max(0, Math.min(2 * Math.PI, this.x(d.x1))))
             .innerRadius(d => Math.max(0, this.y(d.y0)))
             .outerRadius(d => Math.max(0, this.y(d.y1)))
 
-        this.hueDXScale = d3.scaleLinear()
+        this.hueDXScale = scaleLinear()
             .domain([0, 1])
             .range([0, 360])
 
@@ -74,7 +81,7 @@ class Sunburst extends React.Component {
 
     _setTooltipCallbacks() {
 
-        this.tooltipDom = d3.select(`#${this.props.domId}`)
+        this.tooltipDom = select(`#${this.props.domId}`)
             .append('div')
 			.attr('class', 'sunburst-tooltip')
             .style('position', 'absolute')
@@ -89,20 +96,22 @@ class Sunburst extends React.Component {
         this.svg.selectAll('path')
             .on("mouseover", function(d) {		
                 if (this.props.tooltip) {
-                    this.tooltipDom.transition()		
-                        .duration(200)		
-                        .style("opacity", .9);		
+                    this.tooltipDom.transition()
+                        .style("opacity", .9)
+                        .duration(200)
+
                     this.tooltipDom.html((this.props.tooltipFormatter(d.data)))
-                        .style("left", (d3.event.pageX) + "px")		
-                        .style("top", (d3.event.pageY - 28) + "px")
+                        .style("left", (event.pageX) + "px")		
+                        .style("top", (event.pageY - 28) + "px")
                 }
                 this.props.onMouseover && this.props.onMouseover(d);
 
             }.bind(this))					
             .on("mouseout", function(d) {		
                 this.props.tooltip && this.tooltipDom.transition()		
-                    .duration(500)		
-                    .style("opacity", 0);	
+                    .style("opacity", 0)
+                    .duration(500)
+
                 this.props.onMouseout && this.props.onMouseout(d);
             }.bind(this));
     }
@@ -114,7 +123,7 @@ class Sunburst extends React.Component {
 
     // figures out the arc length for a node
     _arcTweenData(a, i, node) {    // eslint-disable-line
-        const oi = d3.interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0) }, a);
+        const oi = interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0) }, a);
         function _tween(t) {
             const b = oi(t);
             a.x0s = b.x0;     // eslint-disable-line
@@ -123,7 +132,7 @@ class Sunburst extends React.Component {
         }
         var tween = _tween.bind(this)
         if (i === 0) {
-            const xd = d3.interpolate(this.x.domain(), [this.node.x0, this.node.x1]);
+            const xd = interpolate(this.x.domain(), [this.node.x0, this.node.x1]);
             return function (t) {
                 this.x.domain(xd(t));
                 return tween(t);
@@ -134,9 +143,9 @@ class Sunburst extends React.Component {
     }
 
     _arcTweenZoom(d) {
-        const xd = d3.interpolate(this.x.domain(), [d.x0, d.x1]), // eslint-disable-line
-            yd = d3.interpolate(this.y.domain(), [d.y0, 1]),
-            yr = d3.interpolate(this.y.range(), [d.y0 ? 40 : 0, this.radius]);
+        const xd = interpolate(this.x.domain(), [d.x0, d.x1]), // eslint-disable-line
+            yd = interpolate(this.y.domain(), [d.y0, 1]),
+            yr = interpolate(this.y.range(), [d.y0 ? 40 : 0, this.radius]);
         return function (data, i) {
             return i
                     ? () => this.arc(data)
@@ -154,14 +163,14 @@ class Sunburst extends React.Component {
             }
             if (current.depth <= 1) {
                 hue = this.hueDXScale(d.x0);
-                current.fill = d3.hsl(hue, 0.5, 0.6);
+                current.fill = hsl(hue, 0.5, 0.6);
                 return current.fill;
             }
             current.fill = current.parent.fill.brighter(0.5);
-            const hsl = d3.hsl(current.fill);
+            const thishsl = hsl(current.fill);
             hue = this.hueDXScale(current.x0);
-            const colorshift = hsl.h + (hue / 4);
-            return d3.hsl(colorshift, hsl.s, hsl.l);
+            const colorshift = thishsl.h + (hue / 4);
+            return hsl(colorshift, thishsl.s, thishsl.l);
         })
         .attr('stroke', '#fff')
         .attr('stroke-width', '1')
@@ -169,8 +178,8 @@ class Sunburst extends React.Component {
     }
 
     update() {
-        this.rootData = d3.hierarchy(this.props.data);
-        this.svg = d3.select('svg').append('g').attr('transform', `translate(${this.props.width / 2},${this.props.height / 2})`)
+        this.rootData = hierarchy(this.props.data);
+        this.svg = select('svg').append('g').attr('transform', `translate(${this.props.width / 2},${this.props.height / 2})`)
         this.firstBuild = true;
         this.node = this.rootData;
         this.rootData.sum(d => d.size);
