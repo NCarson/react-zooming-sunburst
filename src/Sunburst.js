@@ -3,18 +3,21 @@ import { isEqual } from 'lodash/lang';
 import PropTypes from 'prop-types'
 
 import { hsl } from 'd3-color';
+import { select as d3Select, event as d3Event } from 'd3-selection';
 import { scaleLinear, scaleSqrt } from 'd3-scale';
-import { select, event } from 'd3-selection';
-import { hierarchy, partition } from 'd3-hierarchy';
-import { arc } from 'd3-shape';
-import { interpolate } from 'd3-interpolate';
-import { transition } from 'd3-transition'; // eslint-disable-line no-unused-vars
+import { hierarchy as d3Hierarchy, partition as d3Partition } from 'd3-hierarchy';
+import { arc as d3Arc } from 'd3-shape';
+import { path as d3Path } from 'd3-path';
+import { interpolate as d3Interpolate } from 'd3-interpolate';
+import { transition as d3Transition } from 'd3-transition';
 
 /*
+https://github.com/vasturiano/sunburst-chart
 https://github.com/mojoaxel/d3-sunburst
 https://github.com/ebemunk/chess-dataviz
 https://github.com/ArbaazDossani/react-zoomable-sunburst-d3-v4
 */
+    //https://beta.observablehq.com/@mbostock/d3-zoomable-sunburst
 
 class Sunburst extends React.Component {
 
@@ -25,9 +28,11 @@ class Sunburst extends React.Component {
 
 		// requried /w/ default
         domId: PropTypes.string,
-        scale: PropTypes.string.isRequired,
         tooltip: PropTypes.bool.isRequired,
-        tooltipFormatter: PropTypes.func.isRequired,
+        tooltipFunc: PropTypes.func.isRequired,
+        sumFunc: PropTypes.func.isRequired,
+        minSliceAngle: PropTypes.number.isRequired,
+        transitionDuration: PropTypes.number.isRequired,
 
         onSelect: PropTypes.func,
         onMouseover: PropTypes.func,
@@ -35,38 +40,42 @@ class Sunburst extends React.Component {
     }
 
     static defaultProps = {
-        domId:'sunburst-container',
-        scale:'linear',
+        domId:'sunburst-wrapper',
         tooltip: true,
-        tooltipFormatter: (data) => data.name
+        tooltipFunc: (data) => data.name,
+        sumFunc: (data) => data.size,
+        minSliceAngle: .2,
+        transitionDuration: 750,
     }
 
     constructor(props) {
         super(props);
 
-        const w = this.props.width
-        const h = this.props.height
+        const maxRadius = (Math.min(this.props.width, this.props.height) / 2);
+        this.y = scaleSqrt()
+            .range([maxRadius * .1, maxRadius]);
 
-        this.radius = (Math.min(w, h) / 2) - 10
-        this.x = scaleLinear().range([0, 2 * Math.PI])
-        this.y = this.props.scale === 'linear' ? scaleLinear().range([0, this.radius]) : scaleSqrt().range([0, this.radius])
-        this.partition = partition()
+        this.x= scaleLinear()
+            .domain([0, 10]) // For initial build-in animation
+            .range([0, 2 * Math.PI])
+            .clamp(true);
 
-        this.arc = arc()
-            .startAngle(d => Math.max(0, Math.min(2 * Math.PI, this.x(d.x0))))
-            .endAngle(d => Math.max(0, Math.min(2 * Math.PI, this.x(d.x1))))
+        this.arc = d3Arc()
+            .startAngle(d => this.x(d.x0))
+            .endAngle(d => this.x(d.x1))
             .innerRadius(d => Math.max(0, this.y(d.y0)))
-            .outerRadius(d => Math.max(0, this.y(d.y1)))
+            .outerRadius(d => Math.max(0, this.y(d.y1)));
+
+
 
         this.hueDXScale = scaleLinear()
             .domain([0, 1])
             .range([0, 360])
 
-        this.rootData = null
+        this.chartId = Math.round(Math.random() * 1e12); // Unique ID for DOM elems
+
         this.svg = null
-        this.firstBuild = null
-        this.node = null
-        this.tooltipDom = null
+        this.canvas = null
     }
 
     componentDidMount() {
@@ -79,6 +88,148 @@ class Sunburst extends React.Component {
         }
     }
 
+    _colorize(d) {
+        let hue;
+        const current = d;
+        if (current.depth === 0) {
+            return '#33cccc';
+        }
+        if (current.depth <= 1) {
+            hue = this.hueDXScale(d.x0);
+            current.fill = hsl(hue, 0.5, 0.6);
+            return current.fill;
+        }
+        current.fill = current.parent.fill.brighter(0.5);
+        const thishsl = hsl(current.fill);
+        hue = this.hueDXScale(current.x0);
+        const colorshift = thishsl.h + (hue / 4);
+        return hsl(colorshift, thishsl.s, thishsl.l);
+
+    }
+
+
+    update() {
+
+        if (!this.props.data) return;
+
+        if (!this.svg) {
+            const w = this.props.width
+            const h = this.props.height
+            const el = d3Select('#' + this.props.domId)
+
+            this.svg = el.append('svg');
+            this.svg
+              .style('width', w + 'px')
+              .style('height', h + 'px')
+              .attr('viewBox', `${-w/2} ${-h/2} ${w} ${h}`);
+            this.canvas = this.svg.append('g');
+        }
+
+        //const hierData = d3Hierarchy(this.data, accessorFn(state.children))
+        const hierData = d3Hierarchy(this.props.data)
+          .sum(this.props.sumFunc);
+        /*
+        if (state.sort) {
+          hierData.sort(state.sort);
+        }
+        */
+        d3Partition().padding(0)(hierData);
+        hierData.descendants().forEach((d, i) => d.id = i); // Mark each node with a unique ID
+        const layoutData = hierData.descendants();
+
+
+        //const focusD = state.focusOnNode || { x0: 0, x1: 1, y0: 0, y1: 1 };
+        const focusD = { x0: 0, x1: 1, y0: 0, y1: 1 };
+
+        const slice = this.canvas.selectAll('.slice')
+          .data(
+            layoutData
+              .filter(d => // Show only slices with a large enough angle
+                d.x1 >= focusD.x0
+                && d.x0 <= focusD.x1
+                && (d.x1-d.x0)/(focusD.x1-focusD.x0) > this.props.minSliceAngle/360
+              ),
+            d => d.id
+          );
+
+        //const colorOf = accessorFn(state.color);
+        const transition = d3Transition().duration(this.props.transitionDuration);
+
+        // Apply zoom
+        this.svg.transition(transition)
+          .tween('scale', () => {
+            const xd = d3Interpolate(this.x.domain(), [focusD.x0, focusD.x1]);
+            const yd = d3Interpolate(this.y.domain(), [focusD.y0, 1]);
+            return t => {
+              this.x.domain(xd(t));
+              this.y.domain(yd(t));
+            };
+          });
+
+        // Exiting
+        const oldSlice = slice.exit().transition(transition).style('opacity', 0).remove();
+        oldSlice.select('path.main-arc').attrTween('d', d => () => this.arc(d));
+
+        function click(d, x, y, radius, arc) {
+            this.svg.transition()
+                .duration(750)
+                .tween("scale", function() {
+                    var xd = d3Interpolate(x.domain(), [d.x0, d.x1]),
+                    yd = d3Interpolate(y.domain(), [d.y0, 1]),
+                    yr = d3Interpolate(y.range(), [d.y0 ? 20 : 0, radius]);
+                return function(t) { x.domain(xd(t)); y.domain(yd(t)).range(yr(t)); };
+                })
+            .selectAll("path")
+              .attrTween("d", function(d) { return function() { return arc(d); }; });
+        }
+
+        // Entering
+        const newSlice = slice.enter().append('g')
+            .attr('class', 'slice')
+            .style('opacity', 0)
+            .on('click', (d) => {
+                d3Event.stopPropagation();
+                this._click(d)
+            })
+
+        newSlice.append('path')
+          .attr('class', 'main-arc')
+            .style('fill', d => this._colorize(d))
+            .attr('stroke', '#fff')
+            .attr('stroke-width', '1')
+
+        // Entering + Updating
+        const allSlices = slice.merge(newSlice);
+
+        allSlices.style('opacity', 1);
+
+        allSlices.select('path.main-arc').transition(transition)
+          .attrTween('d', d => () => this.arc(d))
+            .style('fill', d => this._colorize(d))
+            .attr('stroke', '#fff')
+            .attr('stroke-width', '1')
+    }
+    _click(d) {
+
+        this.svg.transition()
+            .duration(750)
+            .tween("scale", function() {
+                var xd = d3Interpolate(this.x.domain(), [d.x0, d.x1]),
+                yd = d3Interpolate(this.y.domain(), [d.y0, 1]),
+                yr = d3Interpolate(this.y.range(), [d.y0 ? 20 : 0, this.radius]);
+            return function(t) { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); }.bind(this);
+            }.bind(this))
+        .selectAll("path")
+          .attrTween("d", function(d) { return function() { return this.arc(d); }.bind(this); }.bind(this));
+    }
+
+    render() {
+        return (
+            <div id={this.props.domId} />
+        );
+    }
+
+    /*
     _setTooltipCallbacks() {
 
         this.tooltipDom = select(`#${this.props.domId}`)
@@ -89,6 +240,7 @@ class Sunburst extends React.Component {
             .style('opacity', '0')
             .style('text-align', 'center')
             .style('border-radius', '8px')
+            .style('max-width', '20em')
             .style('pointer-events', 'none')
             .style('background', 'lightsteelblue')
             .style('padding', '3px')
@@ -100,7 +252,10 @@ class Sunburst extends React.Component {
                         .style("opacity", .9)
                         .duration(200)
 
-                    this.tooltipDom.html((this.props.tooltipFormatter(d.data)))
+                    const node = d.data
+                    const txt = `${node.san} ${node.opening} ${node.eco_variation}` 
+
+                    this.tooltipDom.html(this.props.tooltipFunc(d.data))
                         .style("left", (event.pageX) + "px")		
                         .style("top", (event.pageY - 28) + "px")
                 }
@@ -115,92 +270,14 @@ class Sunburst extends React.Component {
                 this.props.onMouseout && this.props.onMouseout(d);
             }.bind(this));
     }
+    */
 
     _onClick(d) {
         this.props.onSelect && this.props.onSelect(d);
         this.svg.selectAll('path').transition().duration(1000).attrTween('d', this._arcTweenZoom(d).bind(this));
     }
 
-    // figures out the arc length for a node
-    _arcTweenData(a, i, node) {    // eslint-disable-line
-        const oi = interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0) }, a);
-        function _tween(t) {
-            const b = oi(t);
-            a.x0s = b.x0;     // eslint-disable-line
-            a.x1s = b.x1;     // eslint-disable-line
-            return this.arc(b);
-        }
-        var tween = _tween.bind(this)
-        if (i === 0) {
-            const xd = interpolate(this.x.domain(), [this.node.x0, this.node.x1]);
-            return function (t) {
-                this.x.domain(xd(t));
-                return tween(t);
-            }.bind(this);
-        } else {    // eslint-disable-line
-            return tween;
-        }
-    }
 
-    _arcTweenZoom(d) {
-        const xd = interpolate(this.x.domain(), [d.x0, d.x1]), // eslint-disable-line
-            yd = interpolate(this.y.domain(), [d.y0, 1]),
-            yr = interpolate(this.y.range(), [d.y0 ? 40 : 0, this.radius]);
-        return function (data, i) {
-            return i
-                    ? () => this.arc(data)
-                    : (t) => { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); return this.arc(data); };
-        };
-    }
-
-    _firstFill() {
-        this.svg.selectAll('path').data(this.partition(this.rootData).descendants()).enter().append('path')
-        .style('fill', (d) => {
-            let hue;
-            const current = d;
-            if (current.depth === 0) {
-                return '#33cccc';
-            }
-            if (current.depth <= 1) {
-                hue = this.hueDXScale(d.x0);
-                current.fill = hsl(hue, 0.5, 0.6);
-                return current.fill;
-            }
-            current.fill = current.parent.fill.brighter(0.5);
-            const thishsl = hsl(current.fill);
-            hue = this.hueDXScale(current.x0);
-            const colorshift = thishsl.h + (hue / 4);
-            return hsl(colorshift, thishsl.s, thishsl.l);
-        })
-        .attr('stroke', '#fff')
-        .attr('stroke-width', '1')
-        .on('click', this._onClick.bind(this))
-    }
-
-    update() {
-        this.rootData = hierarchy(this.props.data);
-        this.svg = select('svg').append('g').attr('transform', `translate(${this.props.width / 2},${this.props.height / 2})`)
-        this.firstBuild = true;
-        this.node = this.rootData;
-        this.rootData.sum(d => d.size);
-
-        if (this.firstBuild) {
-            this.firstBuild = false
-            this._firstFill()
-        } else {
-            this.svg.selectAll('path').data(this.partition(this.rootData).descendants());
-        }
-        this.svg.selectAll('path').transition().duration(1000).attrTween('d', (d, i) => this._arcTweenData(d, i));
-        this._setTooltipCallbacks()
-    }
-
-    render() {
-        return (
-            <div id={this.props.domId}>
-                <svg style={{ width: parseInt(this.props.width, 10) || 480, height: parseInt(this.props.height, 10) || 400 }} id={`${this.props.domId}-svg`} />
-            </div>
-        );
-    }
 }
 
 export default Sunburst;
