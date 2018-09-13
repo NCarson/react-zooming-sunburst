@@ -9,15 +9,12 @@ import { hierarchy as d3Hierarchy, partition as d3Partition } from 'd3-hierarchy
 import { arc as d3Arc } from 'd3-shape';
 import { path as d3Path } from 'd3-path';
 import { interpolate as d3Interpolate } from 'd3-interpolate';
-import { transition as d3Transition } from 'd3-transition';
+import { transition as d3Transition } from 'd3-transition' //eslint-disable-line no-unused-vars
 
 /*
-https://github.com/vasturiano/sunburst-chart
-https://github.com/mojoaxel/d3-sunburst
-https://github.com/ebemunk/chess-dataviz
-https://github.com/ArbaazDossani/react-zoomable-sunburst-d3-v4
+ * zoomable /w/ labels -- https://bl.ocks.org/vasturiano/12da9071095fbd4df434e60d52d2d58d
+ * text opacity -- https://gist.github.com/metmajer/5480307
 */
-    //https://beta.observablehq.com/@mbostock/d3-zoomable-sunburst
 
 class Sunburst extends React.Component {
 
@@ -27,25 +24,27 @@ class Sunburst extends React.Component {
         height: PropTypes.string.isRequired,
 
 		// requried /w/ default
-        domId: PropTypes.string,
         tooltip: PropTypes.bool.isRequired,
         tooltipFunc: PropTypes.func.isRequired,
         sumFunc: PropTypes.func.isRequired,
-        minSliceAngle: PropTypes.number.isRequired,
+        radianCutoff: PropTypes.number.isRequired,
         transitionDuration: PropTypes.number.isRequired,
+        colorFunc: PropTypes.func.isRequired,
 
+        domId: PropTypes.string,
         onSelect: PropTypes.func,
         onMouseover: PropTypes.func,
         onMouseout: PropTypes.func,
+        labelFunc: PropTypes.func
     }
 
     static defaultProps = {
-        domId:'sunburst-wrapper',
         tooltip: true,
         tooltipFunc: (data) => data.name,
         sumFunc: (data) => data.size,
-        minSliceAngle: .2,
-        transitionDuration: 750,
+        radianCutoff: .001,
+        transitionDuration: 500,
+        colorFunc: (d, c) => c
     }
 
     constructor(props) {
@@ -59,16 +58,10 @@ class Sunburst extends React.Component {
             .range([0, 2 * Math.PI])
 
         this.arc = d3Arc()
-        /*
-            .startAngle(function(d) { return Math.max(0, Math.min(2 * Math.PI, this.x(d.x0))); })
-            .endAngle(function(d) { return Math.max(0, Math.min(2 * Math.PI, this.x(d.x1))); })
-            .innerRadius(function(d) { return Math.max(0, this.y(d.y0)); })
-            .outerRadius(function(d) { return Math.max(0, this.y(d.y1)); });
-        */
-            .startAngle(d => this.x(d.x0))
-            .endAngle(d => this.x(d.x1))
-            .innerRadius(d => Math.max(0, this.y(d.y0)))
-            .outerRadius(d => Math.max(0, this.y(d.y1)));
+                .startAngle((d) => { return Math.max(0, Math.min(2 * Math.PI, this.x(d.x0))); })
+                .endAngle((d) => { return Math.max(0, Math.min(2 * Math.PI, this.x(d.x1))); })
+                .innerRadius((d) => { return Math.max(0, this.y(d.y0)); })
+                .outerRadius((d) => { return Math.max(0, this.y(d.y1)); });
 
         this.partition = d3Partition()
 
@@ -76,11 +69,10 @@ class Sunburst extends React.Component {
             .domain([0, 1])
             .range([0, 360])
 
-        this.chartId = Math.round(Math.random() * 1e12); // Unique ID for DOM elems
-
+        this.domId = this.props.domId || ('sunburst-wrapper-' + Math.round(Math.random() * 1e12).toString())
         this.svg = null
-        this.canvas = null
-        this.node = null
+        this.tooltipDom = null
+        this.lastSelect = null
     }
 
     componentDidMount() {
@@ -91,6 +83,191 @@ class Sunburst extends React.Component {
         if (!isEqual(this.props, nextProps)) {
             this.update(nextProps);
         }
+    }
+
+    update() {
+        if (!this.props.data) return;
+
+        const root = d3Hierarchy(this.props.data)
+            .sum(function(d) { return !d.children || d.children.length === 0 ? d.count :0; });
+        const data = this.partition(root)
+            .descendants()
+            .filter( (d) =>  d.x1 - d.x0 > this.props.radianCutoff) // 0.005 radians = 0.29 degrees
+
+        if (!this.svg) {
+            const w = this.props.width
+            const h = this.props.height
+            const el = d3Select('#' + this.domId)
+
+            this.svg = el.append('svg');
+            this.svg
+              .style('class', 'sunburst-svg')
+              .style('width', w + 'px')
+              .style('height', h + 'px')
+              .attr('viewBox', `${-w/2} ${-h/2} ${w} ${h}`);
+            //this.canvas = this.svg.append('g');
+            this.svg = d3Select("svg").append("g").attr("id", "bigG")
+
+            var gSlices = this.svg.selectAll("g")
+                .data(data, function (d) { 
+                    return d.data.current; }
+                ).enter().append("g");
+
+            gSlices.exit().remove();
+
+            gSlices.append("path")
+                .attr('class', 'main-arc')
+                .attr('id', (_, i) => `mainArc${i}`)
+                .style("fill", (d) => d.parent ? this._colorize(d) : "white")
+                .style('stroke', 'gray')
+                .on("click", this._update.bind(this))
+
+            if (this.props.labelFunc) {
+                gSlices.append('path')
+                    .attr('class', 'hidden-arc')
+                    .attr('id', (_, i) => `hiddenArc${i}`)
+                    .attr('d', this._middleArcLine.bind(this))
+                    .style('fill', 'none')
+
+                const text = gSlices.append('text')
+                    .attr('display', d => this._textFits(d) ? null : 'none')
+                    .style('pointer-events', 'none')
+                    .style('dominant-baseline', 'middle')
+                    .style('text-anchor', 'middel')
+
+                text.append('textPath')
+                    .attr('startOffset','40%')
+                    .attr('xlink:href', (_, i) => `#hiddenArc${i}` )
+                    .text(d => this.props.labelFunc(d.data));
+            }
+                
+            /*
+            this.svg.selectAll("path")
+                .append("title")
+                .text(function (d) { return d.data.current; })
+            */
+
+        } else {
+            //this.svg.selectAll("path").data(data)
+        }
+
+        this.props.tooltip && this._setTooltips()
+        this._update()
+
+    }
+
+    _textFits(d) {
+
+        if (!d.data.san)
+            return false
+
+        const CHAR_SPACE = 2;
+
+        const deltaAngle = this.x(d.x1) - this.x(d.x0);
+        const r = Math.max(0, (this.y(d.y0) + this.y(d.y1)) / 2);
+        const perimeter = r * deltaAngle;
+        return d.data.san.length * CHAR_SPACE < perimeter;
+    }
+
+    _middleArcLine(d) {
+        const halfPi = Math.PI/2;
+        const angles = [this.x(d.x0) - halfPi, this.x(d.x1) - halfPi];
+        const r = Math.max(0, (this.y(d.y0) + this.y(d.y1)) / 2);
+
+        const middleAngle = (angles[1] + angles[0]) / 2;
+        const invertDirection = middleAngle > 0 && middleAngle < Math.PI; // On lower quadrants write text ccw
+        if (invertDirection) { angles.reverse(); }
+
+        const path = d3Path();
+        path.arc(0, 0, r, angles[0], angles[1], invertDirection);
+        return path.toString();
+    }
+
+    _inDomain(d) {
+        const d0 = this.x.domain()[0]
+        const d1 = this.x.domain()[1]
+        if (d.x0 < d0)
+            return false
+        if (d.x1 > d1)
+            return false
+        return true
+    }
+
+    _update(d = { x0: 0, x1: 1, y0: 0, y1: 1 }, i, a) {
+
+        if (this.lastSelect && a && this.lastSelect == a[i].id)
+            return
+
+        if (d.data) { // if its a real selection
+            // if event was handled
+            if (this.props.onSelect && this.props.onSelect(d) === false)
+                return 
+        }
+        this.lastSelect = a && a[i].id
+
+		this.svg.transition().selectAll('text').attr("opacity", 0);
+
+        const transition = this.svg.transition()
+		  .duration(this.props.transitionDuration) // duration of transition
+		  .tween("scale", function() {
+				var xd = d3Interpolate(this.x.domain(), [d.x0 , d.x1]),
+				yd = d3Interpolate(this.y.domain(), [d.y0 , 1]),
+				yr = d3Interpolate(this.y.range(), [(d.y0 ? (40) : 0) , this.radius]);
+				return function(t) { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); }.bind(this);
+		    }.bind(this))
+
+        transition.selectAll('path.hidden-arc')
+            .attrTween('d', d => () => this._middleArcLine(d));
+
+        transition.selectAll('path.main-arc')
+            .attrTween('d', d => () => this.arc(d))
+			.on("end", (e, i, a) => {
+			  	// check if the animated element's data e lies within the visible angle span given in d
+				if (e.x0 >= d.x0 && e.x0 < (d.x0 + (d.x1 - d.x0))) {
+					// get a selection of the associated text element
+					var arcText = d3Select(a[i].parentNode).select("text");
+					// fade in the text element and recalculate positions
+                    arcText.transition(this.props.transitionDuration / 2)
+				   		.attr("opacity", 1)
+                        .attr('display', d => this._textFits(d) ? null : 'none')
+			  }
+      		});
+    }
+
+    _setTooltips() {
+
+        this.tooltipDom = d3Select(`#${this.domId}`)
+            .append('div')
+			.attr('class', 'sunburst-tooltip')
+            .style('position', 'absolute')
+            .style('z-index', '10')
+            .style('opacity', '0')
+            .style('text-align', 'center')
+            .style('border-radius', '8px')
+        //.style('max-width', '20em')
+            .style('pointer-events', 'none')
+            .style('background', 'lightsteelblue')
+            .style('padding', '3px')
+
+        this.svg.selectAll('path.main-arc')
+            .on("mouseover", function(d) {		
+                if (this.props.tooltip) {
+                        this.tooltipDom.html(this.props.tooltipFunc(d.data))
+                            .style("left", (d3Event.pageX) + "px")		
+                            .style("top", (d3Event.pageY - (this.props.height / 10)) + "px")
+                        this.tooltipDom.transition()
+                            .style("opacity", .9)
+                            .duration(200)
+                this.props.onMouseover && this.props.onMouseover(d);
+                }
+            }.bind(this))					
+            .on("mouseout", function(d) {		
+                this.props.tooltip && this.tooltipDom.transition()		
+                    .style("opacity", 0)
+                    .duration(500)
+
+                this.props.onMouseout && this.props.onMouseout(d);
+            }.bind(this));
     }
 
     _colorize(d) {
@@ -108,215 +285,16 @@ class Sunburst extends React.Component {
         const thishsl = hsl(current.fill);
         hue = this.hueDXScale(current.x0);
         const colorshift = thishsl.h + (hue / 4);
-        return hsl(colorshift, thishsl.s, thishsl.l);
+        const c = hsl(colorshift, thishsl.s, thishsl.l)
+        return this.props.colorFunc(d, c)
     }
 
-    update() {
-        if (!this.props.data) return;
-
-        const root = d3Hierarchy(this.props.data)
-            .sum(function(d) { return !d.children || d.children.length === 0 ? d.count :0; });
-        const data = this.partition(root)
-            .descendants()
-            .filter( (d) =>  d.x1 - d.x0 > 0.001) // 0.005 radians = 0.29 degrees
-
-        if (!this.svg) {
-            const w = this.props.width
-            const h = this.props.height
-            const el = d3Select('#' + this.props.domId)
-
-            this.svg = el.append('svg');
-            this.svg
-              .style('width', w + 'px')
-              .style('height', h + 'px')
-              .attr('viewBox', `${-w/2} ${-h/2} ${w} ${h}`);
-            //this.canvas = this.svg.append('g');
-            this.svg = d3Select("svg").append("g").attr("id", "bigG")
-
-            var gSlices = this.svg.selectAll("g")
-                .data(data, function (d) { 
-                    return d.data.current; }
-                ).enter().append("g");
-
-            gSlices.exit().remove();
-
-            gSlices.append("path")
-                .style("fill", function (d) { 
-                    return d.parent ? this._colorize(d) : "white"; 
-                }.bind(this))
-                .style('stroke', 'gray')
-
-            gSlices.append("text")
-                .attr("dy", ".35em")
-                .text(function (d) { return d.parent ? d.data.san: ""; })
-                .attr("id", function (d) { return "w" + d.data.current; })
-                .attr('text-anchor', 'end')
-                .style('z-index', 10)
-                
-            this.svg.selectAll("path")
-                .append("title")
-                .text(function (d) { return d.data.current; })
-
-        } else {
-            this.svg.selectAll("path")
-                .data(data)
-        }
-
-        this.svg.selectAll("path")
-            .on("click", this._click.bind(this))
-
-        this.svg.selectAll("text")
-            .transition("update")
-            .duration(750)
-            .attrTween("transform", function (d, i) { return this.arcTweenText(d, i).bind(this); }.bind(this))
-            //.attr('text-anchor', function (d) { return d.textAngle > 180 ? "start" : "end"; })
-            //.attr("dx", function (d) { return d.textAngle > 180 ? -13 : 13; })
-            .attr("opacity", function (e) { return e.x1 - e.x0 > 0.01 ? 1 : 0; });
-
-        this._updatePath()
-    }
-
-    _click(d) {
-        console.log('click', d)
-        this.node = d;
-
-        //this._updatePath()
-        //this.svg.selectAll("path").transition("click").duration(750).attrTween("d", function (d, i) { return this.arcTweenPath(d, i).bind(this); }.bind(this));
-        this.svg.transition()
-		  .duration(750) // duration of transition
-		  .tween("scale", function() {
-				var xd = d3Interpolate(this.x.domain(), [d.x0, d.x1]),
-				yd = d3Interpolate(this.y.domain(), [d.y0, 1]),
-				yr = d3Interpolate(this.y.range(), [d.y0 ? (40) : 0, this.radius]);
-				return function(t) { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); }.bind(this);
-			}.bind(this))
-			.selectAll("path")
-			.attrTween("d", function(d) { return function() { return this.arc(d); }.bind(this); }.bind(this));
-
-        this.svg.selectAll("text")
-           .transition("click")
-           .duration(750)
-           .attrTween("transform", function (d, i) { return this.arcTweenText(d, i); }.bind(this))
-            //.attr('text-anchor', function (d) { return d.textAngle > 180 ? "start" : "end"; })
-            //.attr("dx", function (d) { return d.textAngle > 180 ? -13 : 13; })
-            /*
-           .attr("opacity", function (e) {
-                if (e.x0 >= d.x0 && e.x1 <= d.x1) {
-                   return (e.x1 - e.x0 > 0.01 ? 1 : 0);
-                } else {
-                   return 0;
-                }
-           })
-           */
-    }
-
-    _updatePath() {
-        this.svg.selectAll("path")
-            .transition("update")
-            .duration(750).attrTween("d", function (d, i) {
-                return this.arcTweenPath(d, i).bind(this);
-            }.bind(this));
-    }
-
-   // When switching data: interpolate the arcs in data space.
-    arcTweenPath(a, i) {
-       // (a.x0s ? a.x0s : 0) -- grab the prev saved x0 or set to 0 (for 1st time through)
-       // avoids the stash() and allows the sunburst to grow into being
-        var oi = d3Interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0), y0: (a.y0s ? a.y0s : 0), y1: (a.y1s ? a.y1s : 0) }, a);
-        function tween(t) {
-            var b = oi(t);
-            a.x0s = b.x0;
-            a.x1s = b.x1;
-            a.y0s = b.y0;
-            a.y1s = b.y1;
-            return this.arc(b);
-        }
-        if (i == 0 && this.node) {   // If we are on the first arc, adjust the x domain to match the root node at the current zoom level.
-            var xd = d3Interpolate(this.x.domain(), [this.node.x0, this.node.x1]);
-            var yd = d3Interpolate(this.y.domain(), [this.node.y0, 1]);
-            var yr = d3Interpolate(this.y.range(), [this.node.y0 ? 0 : 0, this.radius]);
-
-            return function (t) {
-                this.x.domain(xd(t));
-                this.y.domain(yd(t)).range(yr(t));
-                return tween.bind(this)(t);
-            };
-        } else {
-            return tween.bind(this);
-        }
-    }
-    // When switching data: interpolate the arcs in data space.
-    //$("#w1Jo").attr("transform").substring(10,$("#w1Jo").attr("transform").search(",")) 
-    arcTweenText(a, i) {
-
-        var oi = d3Interpolate({ x0: (a.x0s ? a.x0s : 0), x1: (a.x1s ? a.x1s : 0), y0: (a.y0s ? a.y0s : 0), y1: (a.y1s ? a.y1s : 0) }, a);
-        function tween(t) {
-            var b = oi(t);
-            var ang = ((this.x((b.x0 + b.x1) / 2) - Math.PI / 2) / Math.PI * 180);
-            //b.textAngle = (ang > 90) ? 180 + ang : ang;
-            b.textAngle = 0
-            a.centroid = this.arc.centroid(b);
-            //b.opacity = (b.x1 - b.x0) > 0.01 ? 0 : 0;
-            //console.log(b.data.name + " x1:" + b.x1 + " x0:" + b.x0);
-            return "translate(" + this.arc.centroid(b) + ")rotate(" + b.textAngle + ")";
-        }
-        return tween.bind(this);
-    }
 
     render() {
         return (
-            <div id={this.props.domId} />
+            <div className='sunburst-wrapper' id={this.domId} />
         );
     }
-
-    /*
-    _setTooltipCallbacks() {
-
-        this.tooltipDom = select(`#${this.props.domId}`)
-            .append('div')
-			.attr('class', 'sunburst-tooltip')
-            .style('position', 'absolute')
-            .style('z-index', '10')
-            .style('opacity', '0')
-            .style('text-align', 'center')
-            .style('border-radius', '8px')
-            .style('max-width', '20em')
-            .style('pointer-events', 'none')
-            .style('background', 'lightsteelblue')
-            .style('padding', '3px')
-
-        this.svg.selectAll('path')
-            .on("mouseover", function(d) {		
-                if (this.props.tooltip) {
-                    this.tooltipDom.transition()
-                        .style("opacity", .9)
-                        .duration(200)
-
-                    const node = d.data
-                    const txt = `${node.san} ${node.opening} ${node.eco_variation}` 
-
-                    this.tooltipDom.html(this.props.tooltipFunc(d.data))
-                        .style("left", (event.pageX) + "px")		
-                        .style("top", (event.pageY - 28) + "px")
-                }
-                this.props.onMouseover && this.props.onMouseover(d);
-
-            }.bind(this))					
-            .on("mouseout", function(d) {		
-                this.props.tooltip && this.tooltipDom.transition()		
-                    .style("opacity", 0)
-                    .duration(500)
-
-                this.props.onMouseout && this.props.onMouseout(d);
-            }.bind(this));
-    }
-    */
-
-    _onClick(d) {
-        this.props.onSelect && this.props.onSelect(d);
-        this.svg.selectAll('path').transition().duration(1000).attrTween('d', this._arcTweenZoom(d).bind(this));
-    }
-
 
 }
 
