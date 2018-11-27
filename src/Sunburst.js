@@ -33,18 +33,19 @@ class Sunburst extends React.Component {
         transitionDuration: PropTypes.number.isRequired, // ms for animation
         colorFunc: PropTypes.func.isRequired, // custom colorizing for slice
         count_member: PropTypes.string.isRequired, // what data element to use for slice size
-        tooltipX: PropTypes.number.isRequired,
-        tooltipY: PropTypes.number.isRequired,
-        saturation: PropTypes.number.isRequired,
-        lightness: PropTypes.number.isRequired,
+        tooltipX: PropTypes.number.isRequired, // offset x to place tooltip
+        tooltipY: PropTypes.number.isRequired, // ofset y to place tooltip
+        saturation: PropTypes.number.isRequired, // base saturation of arcs
+        lightness: PropTypes.number.isRequired, // base lightness of parent arcs
+        child_brightness: PropTypes.number.isRequired, // value to lighten children
+        font_size: PropTypes.number.isRequired, // for calculating if text fits
 
         domId: PropTypes.string, // will be random if undefined
-        onSelect: PropTypes.func,
         onMouseover: PropTypes.func,
         onMouseout: PropTypes.func,
         onClick: PropTypes.func,
         labelFunc: PropTypes.func,   // returns text for slice
-        label_member: PropTypes.string, // checks data[member] to see if it will fit in slice
+        condensedLabelFunc: PropTypes.func, // backup function to try to fit text
         key_member: PropTypes.string, // unique id
         _debug : PropTypes.bool,
         _console : PropTypes.object,
@@ -59,10 +60,12 @@ class Sunburst extends React.Component {
         colorFunc: (node, current_color) => current_color,
         key_member: 'key',
         count_member: 'count',
+        font_size: 12,
         tooltipX: 20,
         tooltipY: 20,
         saturation: .5,
         lightness: .5,
+        child_brightness: .5,
         _debug: false,
         _console: window.console,
     }
@@ -70,6 +73,7 @@ class Sunburst extends React.Component {
     constructor(props) {
         super(props);
 
+        this._last_click = null
         this.radius = (Math.min(this.props.width, this.props.height) / 2);
         this.y = scaleSqrt()
             .range([0, this.radius]);
@@ -135,6 +139,15 @@ class Sunburst extends React.Component {
         this._update(node)
     }
 
+    _onClick(node) {
+        this._last_click = node
+    }
+
+    updateColor()  {
+        this.svg.selectAll('path.sunburst-main-arc')
+            .style("fill", (d) => d.parent ? this._colorize(d) : "white")
+    }
+
     _create() {
         this.props._debug && this.props._console.log("Sunburst: update()")
         if (!this.props.data) return;
@@ -172,12 +185,16 @@ class Sunburst extends React.Component {
 
             const key = this.props.key_member
             gSlices.append("path")
-                .attr('class', 'sunburst-main-arc')
-                .attr('id', (d, i) => { 
+                .attr('class', (d) => {
+                    const cursor = (!d.parent || !d.children) ? ' cursor-pointer' : ' cursor-pointer'
+                    const evenodd = d.depth%2 ? 'even-row' :  'odd-row'
+                    console.log(d)
+                    return `sunburst-main-arc${cursor} ${evenodd}`
+                }).attr('id', (d, i) => { 
                     return key ? `mainArc-${d.data[key]}` : `mainArc-${i}`
                 }).style("fill", (d) => d.parent ? this._colorize(d) : "white")
-                .style('stroke', 'gray')
                 .on('click', function(node) {
+                    this._onClick(node)
                     this.props.onClick && this.props.onClick(node);
                     this._update(node)
                 }.bind(this))
@@ -190,45 +207,82 @@ class Sunburst extends React.Component {
                     .style('fill', 'none')
 
                 const text = gSlices.append('text')
-                    .attr('display', d => this._textFits(d) ? null : 'none')
                     .style('pointer-events', 'none')
                     .style('dominant-baseline', 'middle')
-                    .style('text-anchor', 'middel')
+                    .style('text-anchor', 'middle')
+                    //.attr('display', d => this._textFits(d) ? null : 'none')
 
                 text.append('textPath')
-                    .attr('startOffset','40%')
+                    .attr('startOffset','50%')
                     .attr('xlink:href', (_, i) => `#hiddenArc${i}` )
-                    .text(d => this.props.labelFunc(d.data));
+                    .text(d => this._getLabelText(d) || '')
             }
-                
-            /*
-            this.svg.selectAll("path")
-                .append("title")
-                .text(function (d) { return d.data.current; })
-            */
-
-        } else {
-            //this.svg.selectAll("path").data(data)
         }
-
         this.props.tooltip && this._setTooltips()
         this._update(root)
-
     }
 
-    _textFits(d) {
+    _update(d, i, a) {
 
-        if (!this.props.label_member)
-            return false
-        const label = d.data[this.props.label_member]
+        if (this.lastSelect && a && this.lastSelect == a[i].id)
+            return
+
+        this.lastSelect = a && a[i].id
+
+        this.svg.transition().selectAll('textPath').attr("opacity", 0);
+
+        const transition = this.svg.transition()
+		  .duration(this.props.transitionDuration) // duration of transition
+		  .tween("scale", function() {
+				var xd = d3Interpolate(this.x.domain(), [d.x0 , d.x1]),
+				yd = d3Interpolate(this.y.domain(), [d.y0 , 1]),
+				yr = d3Interpolate(this.y.range(), [(d.y0 ? (20) : 0) , this.radius]);
+				return function(t) { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); }.bind(this);
+		    }.bind(this))
+
+        transition.selectAll('path.sunburst-hidden-arc')
+            .attrTween('d', d => () => this._middleArcLine(d));
+
+        //.style("fill", (d) => d.parent ? this._colorize(d) : "white")
+        transition.selectAll('path.sunburst-main-arc')
+            .attrTween('d', d => () => { 
+                const arc = this.arc(d)
+                return arc
+            }).on("end", (e, i, a) => {
+                if (!this.arc.innerRadius()(e)) // if its not visible
+                    return
+                // get a selection of the associated text element
+                var arcText = d3Select(a[i].parentNode).select("text textPath");
+                // fade in the text element and recalculate positions
+                arcText.transition(this.props.transitionDuration / 2)
+                    .attr("opacity", 1)
+                    .text((d) => {
+                        const text = this._getLabelText(d)
+                        return text
+                    })
+      		});
+    }
+
+    _textFits(d, label) {
+
         if (!label)
             return false
-        
-        const CHAR_SPACE = 2;
-        const deltaAngle = this.x(d.x1) - this.x(d.x0);
-        const r = Math.max(0, (this.y(d.y0) + this.y(d.y1)) / 2);
-        const perimeter = r * deltaAngle;
-        return label.length * CHAR_SPACE < perimeter;
+        // changed to degress
+        const angle = (this.arc.endAngle()(d) - this.arc.startAngle()(d))  * 57.296
+        const radius = this.arc.outerRadius()(d)
+        const arclength =  2*Math.PI*radius*(angle / 360)
+        return label.length * this.props.font_size < arclength;
+    }
+
+    _getLabelText(d) {
+        var label
+        label = this.props.labelFunc && this.props.labelFunc(d)
+        if (this._textFits(d, label))
+            return label
+        label = this.props.condensedLabelFunc && this.props.condensedLabelFunc(d)
+        if (this._textFits(d, label))
+            return label
+        return null
     }
 
     _middleArcLine(d) {
@@ -255,42 +309,7 @@ class Sunburst extends React.Component {
         return true
     }
 
-    _update(d, i, a) {
 
-        if (this.lastSelect && a && this.lastSelect == a[i].id)
-            return
-
-        this.lastSelect = a && a[i].id
-
-		this.svg.transition().selectAll('text').attr("opacity", 0);
-
-        const transition = this.svg.transition()
-		  .duration(this.props.transitionDuration) // duration of transition
-		  .tween("scale", function() {
-				var xd = d3Interpolate(this.x.domain(), [d.x0 , d.x1]),
-				yd = d3Interpolate(this.y.domain(), [d.y0 , 1]),
-				yr = d3Interpolate(this.y.range(), [(d.y0 ? (40) : 0) , this.radius]);
-				return function(t) { this.x.domain(xd(t)); this.y.domain(yd(t)).range(yr(t)); }.bind(this);
-		    }.bind(this))
-
-        transition.selectAll('path.sunburst-hidden-arc')
-            .attrTween('d', d => () => this._middleArcLine(d));
-
-        transition.selectAll('path.sunburst-main-arc')
-            .style("fill", (d) => d.parent ? this._colorize(d) : "white")
-            .attrTween('d', d => () => this.arc(d))
-			.on("end", (e, i, a) => {
-			  	// check if the animated element's data e lies within the visible angle span given in d
-				if (e.x0 >= d.x0 && e.x0 < (d.x0 + (d.x1 - d.x0))) {
-					// get a selection of the associated text element
-					var arcText = d3Select(a[i].parentNode).select("text");
-					// fade in the text element and recalculate positions
-                    arcText.transition(this.props.transitionDuration / 2)
-				   		.attr("opacity", 1)
-                        .attr('display', d => this._textFits(d) ? null : 'none')
-			  }
-      		});
-    }
 
     _setTooltips() {
 
@@ -337,13 +356,13 @@ class Sunburst extends React.Component {
         if (current.depth === 0) {
             return '#33cccc';
         }
-        const {lightness, saturation} = this.props
+        const {lightness, saturation, child_brightness} = this.props
         if (current.depth <= 1) {
             hue = this.hueDXScale(d.x0);
             current.fill = hsl(hue, saturation, lightness);
             return current.fill;
         }
-        current.fill = current.parent.fill.brighter(0.5);
+        current.fill = current.parent.fill.brighter(child_brightness);
         const thishsl = hsl(current.fill);
         hue = this.hueDXScale(current.x0);
         const colorshift = thishsl.h + (hue / 4);
