@@ -7,6 +7,15 @@
     src='https://raw.githubusercontent.com/NCarson/react-zooming-sunburst/master/.screen.png'
     width='400' />
 
+### install
+```
+npm install react-zoomable-sunburst
+```
+
+### development
+```
+cd src && make
+```
 ```jsx
 class Sunburst extends React.Component {
 
@@ -61,15 +70,5 @@ class Sunburst extends React.Component {
     }
     ...
 }
-```
-
-### install
-```
-npm install react-zoomable-sunburst
-```
-
-### development
-```
-cd src && make
 ```
 
