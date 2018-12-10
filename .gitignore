@@ -1,11 +1,5 @@
-lib
+build/
+dist
 node_modules
-public/index.html
-public/index.json
-public/dist
-templates/index.json
+template/index.json
 *.swp
-*.gz
-
-react-zoomable-sunburst-d3-v4
-sunburst-chart

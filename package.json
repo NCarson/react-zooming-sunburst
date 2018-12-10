@@ -1,35 +1,46 @@
 {
-  "name": "makefile-node-template",
-  "version": "1.0.0",
-  "description": "Makefile to compile node.js incrementally",
-  "main": "index.js",
+  "name": "react-zoomable-sunburst",
+  "version": "0.0.1",
+  "description": "zoomable react sunburst",
+  "main": "dist/sunburst.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https:https://github.com/NCarson/react-zoomable-sunburst.git"
+  },
+  "author": "NCarson",
+  "license": "BSD-3-Clause",
   "dependencies": {
-    "d3": "^5.7.0",
-    "react": "^16.4.1",
-    "react-dom": "^16.4.1",
-    "reactstrap": "^6.3.0"
+    "d3-array": "^2.0.2",
+    "d3-collection": "^1.0.7",
+    "d3-color": "^1.2.3",
+    "d3-format": "^1.3.2",
+    "d3-hierarchy": "^1.1.8",
+    "d3-interpolate": "^1.3.2",
+    "d3-path": "^1.0.7",
+    "d3-scale": "^2.1.2",
+    "d3-selection": "^1.3.2",
+    "d3-shape": "^1.2.2",
+    "d3-time": "^1.0.10",
+    "d3-time-format": "^2.1.3",
+    "d3-transition": "^1.1.3",
+    "react": "^16.6.3",
+    "shallowequal": "^1.1.0"
   },
   "devDependencies": {
     "babel-eslint": "^8.2.6",
     "babel-plugin-transform-class-properties": "^6.24.1",
     "babel-plugin-transform-jsx": "^2.0.0",
+    "babel-plugin-transform-object-rest-spread": "^6.26.0",
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-react": "^6.24.1",
     "babel-runtime": "^6.26.0",
     "browserify-global-shim": "^1.0.3",
-    "eslint": "^5.3.0",
+    "eslint": "^5.10.0",
     "eslint-plugin-import": "^2.14.0",
-    "eslint-plugin-react": "^7.11.1"
-  },
-  "browserify-global-shim": {
-    "react": "React",
-    "react-dom": "ReactDOM",
-    "reactstrap": "Reactstrap",
-    "prop-types": "PropTypes"
+    "eslint-plugin-react": "^7.11.1",
+    "react-dom": "^16.6.3"
   }
 }

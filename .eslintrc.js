@@ -6,7 +6,7 @@ module.exports = {
     },
     "extends": [
         "eslint:recommended",
-        "plugin:react/recommended",
+        //"plugin:react/recommended",
         "plugin:import/errors"
     ],
     "parserOptions": {
@@ -17,7 +17,6 @@ module.exports = {
         "sourceType": "module"
     },
     "plugins": [
-        "react"
     ],
     "rules": {
 
@@ -34,8 +33,9 @@ module.exports = {
 
         "import/no-unresolved": "warn",
 
-        "react/prop-types": "warn",
-        "react/no-find-dom-node" : "off",
+        //"react/prop-types": "warn",
+        //"react/no-find-dom-node" : "off",
+          
         //endmine
 
     }

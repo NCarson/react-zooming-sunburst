@@ -1,18 +1,20 @@
 import React from 'react';
-import { isEqual } from 'lodash/lang';
 import PropTypes from 'prop-types'
+import shallowEqual from 'shallowequal'
 
-import { hsl } from 'd3-color';
+import { hsl as d3Hsl } from 'd3-color';
 import { select as d3Select, event as d3Event } from 'd3-selection';
-import { scaleLinear, scaleSqrt } from 'd3-scale';
+import { scaleLinear as d3ScaleLinear, scaleSqrt as d3ScaleSqrt } from 'd3-scale';
 import { hierarchy as d3Hierarchy, partition as d3Partition } from 'd3-hierarchy';
 import { arc as d3Arc } from 'd3-shape';
 import { path as d3Path } from 'd3-path';
 import { interpolate as d3Interpolate } from 'd3-interpolate';
-import { transition as d3Transition } from 'd3-transition' //eslint-disable-line no-unused-vars
 
-//TODO switch from lodash to shallow equal
-/*
+// We have to import this event though we dont use it
+import { transition as d3Transition } from 'd3-transition';
+d3Transition;
+
+/* REFS
  * zoomable /w/ labels -- https://bl.ocks.org/vasturiano/12da9071095fbd4df434e60d52d2d58d
  * text opacity -- https://gist.github.com/metmajer/5480307
 */
@@ -24,6 +26,7 @@ class Sunburst extends React.Component {
         // if width and height are not the same there will be dead space
         width: PropTypes.string.isRequired,
         height: PropTypes.string.isRequired,
+        count_member: PropTypes.string.isRequired, // what data element to use for slice size
 
 		// requried /w/ default
         tooltip: PropTypes.bool.isRequired,
@@ -32,7 +35,6 @@ class Sunburst extends React.Component {
         radianCutoff: PropTypes.number.isRequired, // smallest slice to show in radians
         transitionDuration: PropTypes.number.isRequired, // ms for animation
         colorFunc: PropTypes.func.isRequired, // custom colorizing for slice
-        count_member: PropTypes.string.isRequired, // what data element to use for slice size
         tooltipX: PropTypes.number.isRequired, // offset x to place tooltip
         tooltipY: PropTypes.number.isRequired, // ofset y to place tooltip
         saturation: PropTypes.number.isRequired, // base saturation of arcs
@@ -59,7 +61,6 @@ class Sunburst extends React.Component {
         transitionDuration: 500,
         colorFunc: (node, current_color) => current_color,
         key_member: 'key',
-        count_member: 'count',
         font_size: 12,
         tooltipX: 20,
         tooltipY: 20,
@@ -75,10 +76,10 @@ class Sunburst extends React.Component {
 
         this._last_click = null
         this.radius = (Math.min(this.props.width, this.props.height) / 2);
-        this.y = scaleSqrt()
+        this.y = d3ScaleSqrt()
             .range([0, this.radius]);
 
-        this.x= scaleLinear()
+        this.x= d3ScaleLinear()
             .range([0, 2 * Math.PI])
 
         this.arc = d3Arc()
@@ -89,7 +90,7 @@ class Sunburst extends React.Component {
 
         this.partition = d3Partition()
 
-        this.hueDXScale = scaleLinear()
+        this.hueDXScale = d3ScaleLinear()
             .domain([0, 1])
             .range([0, 360])
 
@@ -106,13 +107,14 @@ class Sunburst extends React.Component {
 
     shouldComponentUpdate(nextProps) {
         this.props._debug && this.props._console.log("Sunburst: shouldComponentUpdate()", this.props)
-        if (!isEqual(this.props, nextProps)) {
+        if (!shallowEqual(this.props, nextProps)) {
             return false
         }
         return true
     }
 
     _destroy_svg() {
+        this.props._debug && this.props._console.log("Sunburst: _destroy_svg()")
 		this.svg && this.svg.selectAll('*').remove()
         this.svg = null
     }
@@ -129,6 +131,7 @@ class Sunburst extends React.Component {
     }
 
     select(id) {
+        this.props._debug && this.props._console.log("Sunburst: select(id)")
         const key = '#mainArc-' + id
         const nodes = d3Select(key).nodes()
         if (!nodes.length) {
@@ -140,20 +143,24 @@ class Sunburst extends React.Component {
     }
 
     _onClick(node) {
+        this.props._debug && this.props._console.log("Sunburst: _onClick(node)")
         this._last_click = node
     }
 
     updateColor()  {
+        this.props._debug && this.props._console.log("Sunburst: updateColor()")
         this.svg.selectAll('path.sunburst-main-arc')
             .style("fill", (d) => d.parent ? this._colorize(d) : "white")
     }
 
     _create() {
-        this.props._debug && this.props._console.log("Sunburst: update()")
+        this.props._debug && this.props._console.log("Sunburst: _create()")
         if (!this.props.data) return;
 
         const root = d3Hierarchy(this.props.data)
             .sum(function(d) { 
+                if (d[this.props.count_member] === undefined)
+                    console.warn(`props.count_member (${this.props.count_member}) is not defined on data`)
                 return !d.children || d.children.length === 0 ? d[this.props.count_member] :0; 
             }.bind(this))
         //.filter( (d) => d.depth < 4)
@@ -174,7 +181,7 @@ class Sunburst extends React.Component {
               .style('height', h + 'px')
               .attr('viewBox', `${-w/2} ${-h/2} ${w} ${h}`);
             //this.canvas = this.svg.append('g');
-            this.svg = d3Select("svg").append("g").attr("id", "bigG")
+            //this.svg = d3Select("svg").append("g").attr("id", "bigG")
 
             var gSlices = this.svg.selectAll("g")
                 .data(data)
@@ -188,7 +195,6 @@ class Sunburst extends React.Component {
                 .attr('class', (d) => {
                     const cursor = (!d.parent || !d.children) ? ' cursor-pointer' : ' cursor-pointer'
                     const evenodd = d.depth%2 ? 'even-row' :  'odd-row'
-                    console.log(d)
                     return `sunburst-main-arc${cursor} ${evenodd}`
                 }).attr('id', (d, i) => { 
                     return key ? `mainArc-${d.data[key]}` : `mainArc-${i}`
@@ -223,6 +229,7 @@ class Sunburst extends React.Component {
     }
 
     _update(d, i, a) {
+        this.props._debug && this.props._console.log("Sunburst: _update(d, i, a)")
 
         if (this.lastSelect && a && this.lastSelect == a[i].id)
             return
@@ -230,6 +237,7 @@ class Sunburst extends React.Component {
         this.lastSelect = a && a[i].id
 
         this.svg.transition().selectAll('textPath').attr("opacity", 0);
+        console.log(111, this.svg)
 
         const transition = this.svg.transition()
 		  .duration(this.props.transitionDuration) // duration of transition
@@ -264,6 +272,7 @@ class Sunburst extends React.Component {
     }
 
     _textFits(d, label) {
+        this.props._debug && this.props._console.log("Sunburst: _textFits(d, label)")
 
         if (!label)
             return false
@@ -275,6 +284,7 @@ class Sunburst extends React.Component {
     }
 
     _getLabelText(d) {
+        this.props._debug && this.props._console.log("Sunburst: _getLabelText(d)")
         var label
         label = this.props.labelFunc && this.props.labelFunc(d)
         if (this._textFits(d, label))
@@ -286,6 +296,7 @@ class Sunburst extends React.Component {
     }
 
     _middleArcLine(d) {
+        this.props._debug && this.props._console.log("Sunburst: _middleArcLine(d)")
         const halfPi = Math.PI/2;
         const angles = [this.x(d.x0) - halfPi, this.x(d.x1) - halfPi];
         const r = Math.max(0, (this.y(d.y0) + this.y(d.y1)) / 2);
@@ -300,6 +311,7 @@ class Sunburst extends React.Component {
     }
 
     _inDomain(d) {
+        this.props._debug && this.props._console.log("Sunburst: _inDomain(d)")
         const d0 = this.x.domain()[0]
         const d1 = this.x.domain()[1]
         if (d.x0 < d0)
@@ -313,6 +325,7 @@ class Sunburst extends React.Component {
 
     _setTooltips() {
 
+        this.props._debug && this.props._console.log("Sunburst: _setTooltips(d)")
         this.tooltipDom = d3Select(`#${this.domId}`)
             .append('div')
 			.attr('class', 'sunburst-tooltip')
@@ -351,6 +364,7 @@ class Sunburst extends React.Component {
     }
 
     _colorize(d) {
+        this.props._debug && this.props._console.log("Sunburst: _colorize(d)")
         let hue;
         const current = d;
         if (current.depth === 0) {
@@ -359,14 +373,14 @@ class Sunburst extends React.Component {
         const {lightness, saturation, child_brightness} = this.props
         if (current.depth <= 1) {
             hue = this.hueDXScale(d.x0);
-            current.fill = hsl(hue, saturation, lightness);
+            current.fill = d3Hsl(hue, saturation, lightness);
             return current.fill;
         }
         current.fill = current.parent.fill.brighter(child_brightness);
-        const thishsl = hsl(current.fill);
+        const thishsl = d3Hsl(current.fill);
         hue = this.hueDXScale(current.x0);
         const colorshift = thishsl.h + (hue / 4);
-        const c = hsl(colorshift, thishsl.s, thishsl.l)
+        const c = d3Hsl(colorshift, thishsl.s, thishsl.l)
         return this.props.colorFunc(d, c)
     }
 

@@ -1,0 +1,14 @@
+docs
+Makefile
+config.dev.js
+config.prod.js
+docs
+example
+node_modules
+script
+src
+template
+.makefiles
+.eslintrc
+.exclude.json.cdn
+.git
