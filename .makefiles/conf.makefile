@@ -52,6 +52,8 @@ REACT := 1
 # you  still need to install babel transforms locally
 POST_ES6 := 1
 
+#USE_CONFIG := 1
+
 ######################################
 #  Commands
 ######################################
@@ -208,7 +210,7 @@ endef
 
 .PHONY: all clean clean-gz 
 
-all: $(SRC_CONFIG) $(TARGETS)
+all: $(TARGETS)
 
 clean:
 	rm -f $(TARGETS)
@@ -252,13 +254,15 @@ else
    _MFS_EXCLUDE =  -not \( $(patsubst %,-path % -prune -o,$(EXCL_SRC_DIRS)) -path $(BUILD_DIR) -prune \)
 endif
 
-# switch out dev or prod config if necessary
-ifneq ($(realpath $(CONFIG)),$(shell realpath $(SRC_CONFIG)))
-  $(info $(call _info_msg,config - link,$(CONFIG),$(GREEN)))
-  $(shell test -f $(SRC_CONFIG) && rm -f $(SRC_CONFIG))
-  $(shell rm -f $(SRC_CONFIG))
-  $(shell ln -s $(CONFIG) $(SRC_CONFIG))
-  $(shell touch $(SRC_CONFIG))
+ifdef USE_CONFIG
+  # switch out dev or prod config if necessary
+  ifneq ($(realpath $(CONFIG)),$(shell realpath $(SRC_CONFIG)))
+    $(info $(call _info_msg,config - link,$(CONFIG),$(GREEN)))
+    $(shell test -f $(SRC_CONFIG) && rm -f $(SRC_CONFIG))
+    $(shell rm -f $(SRC_CONFIG))
+    $(shell ln -s $(CONFIG) $(SRC_CONFIG))
+    $(shell touch $(SRC_CONFIG))
+  endif
 endif
 
 ######################################
