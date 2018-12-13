@@ -20,6 +20,6 @@ commit-doc:
 publish:
 	cd src && make clean
 	cd src && PRODUCTION=1 make
-	cd src && make doc
+	cd src && make docs
 	npm publish
 

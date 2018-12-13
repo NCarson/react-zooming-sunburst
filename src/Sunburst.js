@@ -81,7 +81,8 @@ class Sunburst extends React.Component {
         condensedLabelFunc: PropTypes.func, // backup function to try to fit text
         key_member: PropTypes.string, // unique id
         _debug : PropTypes.bool,
-        _console : PropTypes.object,
+        _log: PropTypes.func,
+        _warn: PropTypes.func,
     }
 
     static defaultProps = {
@@ -98,7 +99,8 @@ class Sunburst extends React.Component {
         lightness: .5,
         child_brightness: .5,
         _debug: false,
-        _console: window.console,
+        _log: console.log,
+        _warn: console.warn,
     }
 
     constructor(props) {
@@ -131,12 +133,12 @@ class Sunburst extends React.Component {
     }
 
     componentDidMount() {
-        this.props._debug && this.props._console.log("Sunburst: componentDidMount()")
+        this.props._debug && this.props._log("Sunburst: componentDidMount()")
         this._create();
     }
 
     shouldComponentUpdate(nextProps) {
-        this.props._debug && this.props._console.log("Sunburst: shouldComponentUpdate()", this.props)
+        this.props._debug && this.props._log("Sunburst: shouldComponentUpdate()", this.props)
         if (!shallowEqual(this.props, nextProps)) {
             return false
         }
@@ -144,19 +146,19 @@ class Sunburst extends React.Component {
     }
 
     _destroy_svg() {
-        this.props._debug && this.props._console.log("Sunburst: _destroy_svg()")
+        this.props._debug && this.props._log("Sunburst: _destroy_svg()")
 		this.svg && this.svg.selectAll('*').remove()
         this.svg = null
     }
 
     componentDidUpdate() { //prevProps
-        this.props._debug && this.props._console.log("Sunburst: componentDidUpdate()")
+        this.props._debug && this.props._log("Sunburst: componentDidUpdate()")
         this._destroy_svg()
         this._create()
     }
 
     componentWillUnmount() {
-        this.props._debug && this.props._console.log("Sunburst: componentWillUnmount()")
+        this.props._debug && this.props._log("Sunburst: componentWillUnmount()")
         this._destroy_svg()
     }
     /**
@@ -165,11 +167,11 @@ class Sunburst extends React.Component {
      * props.
     */
     select(id) {
-        this.props._debug && this.props._console.log("Sunburst: select(id)")
+        this.props._debug && this.props._log("Sunburst: select(id)")
         const key = '#mainArc-' + id
         const nodes = d3Select(key).nodes()
         if (!nodes.length) {
-            console.warn(`could not find node with id of ${key}`)
+            this.props._warn(`could not find node with id of ${key}`)
             return
         }
         const node = nodes[0].__data__
@@ -177,7 +179,7 @@ class Sunburst extends React.Component {
     }
 
     _onClick(node) {
-        this.props._debug && this.props._console.log("Sunburst: _onClick(node)")
+        this.props._debug && this.props._log("Sunburst: _onClick(node)")
         this._last_click = node
     }
 
@@ -186,19 +188,19 @@ class Sunburst extends React.Component {
  * to update to the new color sheme.
 */
     updateColor()  {
-        this.props._debug && this.props._console.log("Sunburst: updateColor()")
+        this.props._debug && this.props._log("Sunburst: updateColor()")
         this.svg.selectAll('path.sunburst-main-arc')
             .style("fill", (d) => d.parent ? this._colorize(d) : "white")
     }
 
     _create() {
-        this.props._debug && this.props._console.log("Sunburst: _create()")
+        this.props._debug && this.props._log("Sunburst: _create()")
         if (!this.props.data) return;
 
         const root = d3Hierarchy(this.props.data)
             .sum(function(d) { 
                 if (d[this.props.count_member] === undefined)
-                    console.warn(`props.count_member (${this.props.count_member}) is not defined on data`)
+                    this.props._warn(`props.count_member (${this.props.count_member}) is not defined on data`)
                 return !d.children || d.children.length === 0 ? d[this.props.count_member] :0; 
             }.bind(this))
         //.filter( (d) => d.depth < 4)
@@ -267,7 +269,7 @@ class Sunburst extends React.Component {
     }
 
     _update(d, i, a) {
-        this.props._debug && this.props._console.log("Sunburst: _update(d, i, a)")
+        this.props._debug && this.props._log("Sunburst: _update(d, i, a)")
 
         if (this.lastSelect && a && this.lastSelect == a[i].id)
             return
@@ -275,7 +277,6 @@ class Sunburst extends React.Component {
         this.lastSelect = a && a[i].id
 
         this.svg.transition().selectAll('textPath').attr("opacity", 0);
-        console.log(111, this.svg)
 
         const transition = this.svg.transition()
 		  .duration(this.props.transitionDuration) // duration of transition
@@ -310,7 +311,7 @@ class Sunburst extends React.Component {
     }
 
     _textFits(d, label) {
-        this.props._debug && this.props._console.log("Sunburst: _textFits(d, label)")
+        this.props._debug && this.props._log("Sunburst: _textFits(d, label)")
 
         if (!label)
             return false
@@ -322,7 +323,7 @@ class Sunburst extends React.Component {
     }
 
     _getLabelText(d) {
-        this.props._debug && this.props._console.log("Sunburst: _getLabelText(d)")
+        this.props._debug && this.props._log("Sunburst: _getLabelText(d)")
         var label
         label = this.props.labelFunc && this.props.labelFunc(d)
         if (this._textFits(d, label))
@@ -334,7 +335,7 @@ class Sunburst extends React.Component {
     }
 
     _middleArcLine(d) {
-        this.props._debug && this.props._console.log("Sunburst: _middleArcLine(d)")
+        this.props._debug && this.props._log("Sunburst: _middleArcLine(d)")
         const halfPi = Math.PI/2;
         const angles = [this.x(d.x0) - halfPi, this.x(d.x1) - halfPi];
         const r = Math.max(0, (this.y(d.y0) + this.y(d.y1)) / 2);
@@ -349,7 +350,7 @@ class Sunburst extends React.Component {
     }
 
     _inDomain(d) {
-        this.props._debug && this.props._console.log("Sunburst: _inDomain(d)")
+        this.props._debug && this.props._log("Sunburst: _inDomain(d)")
         const d0 = this.x.domain()[0]
         const d1 = this.x.domain()[1]
         if (d.x0 < d0)
@@ -361,7 +362,7 @@ class Sunburst extends React.Component {
 
     _setTooltips() {
 
-        this.props._debug && this.props._console.log("Sunburst: _setTooltips(d)")
+        this.props._debug && this.props._.log("Sunburst: _setTooltips(d)")
         this.tooltipDom = d3Select(`#${this.domId}`)
             .append('div')
 			.attr('class', 'sunburst-tooltip')
@@ -400,7 +401,7 @@ class Sunburst extends React.Component {
     }
 
     _colorize(d) {
-        this.props._debug && this.props._console.log("Sunburst: _colorize(d)")
+        this.props._debug && this.props._log("Sunburst: _colorize(d)")
         let hue;
         const current = d;
         if (current.depth === 0) {
@@ -423,7 +424,7 @@ class Sunburst extends React.Component {
     // we have to render first then componentMounted will give us
     // access to the dom
     render() {
-        this.props._debug && this.props._console.log("Sunburst: render()")
+        this.props._debug && this.props._log("Sunburst: render()")
         return (
             <div className='sunburst-wrapper' id={this.domId} />
         );
