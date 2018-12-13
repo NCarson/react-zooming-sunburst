@@ -22,7 +22,8 @@ d3Transition;
 /**
 * Creates a zoomable Sunburst
 * @param {object} props
-* @param {object} props.data - see d3 sunburst for example data shape 
+* @param {object} props.data - see the d3 {@link https://github.com/defunctzombie/d3-examples/blob/master/dendrogram/flare.json|flare.json}
+    data for the shape that is required. 
 * @param {string} props.width - width of svg
 * @param {string} props.height - height of svg. 
 *   If width and height are not the same there will be dead space.
@@ -357,8 +358,6 @@ class Sunburst extends React.Component {
             return false
         return true
     }
-
-
 
     _setTooltips() {
 
