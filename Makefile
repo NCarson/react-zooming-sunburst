@@ -1,4 +1,3 @@
-
 all:
 	cd src && make
 
@@ -10,27 +9,17 @@ clean:
 	cd src && make clean
 	cd template && make clean
 
-define make_cdn
-	@ json -f package.json dependencies |\
-	json --items -c 'RegExp("$1").test(this.key)' |\
-	json -e 'this.name = this.key' |\
-	json -e 'this.prod = `$(strip $2)`' |\
-	json -e 'this.dev = `$(strip $3)`' |\
-	json -e 'this.key = undefined; this.value = undefined'
-	
-endef
+docs:
+	cd src && make docs
 
-cdn-d3:
-	$(call make_cdn,^d3-,\
-		https://unpkg.com/$${this.key}@$${this.value}/dist/$${this.name}.min.js,\
-		https://unpkg.com/$${this.name}@$${this.value}/dist/$${this.name}.js)
+commit-doc:
+	git add docs README.md
+	git commit -m "updated doc"
+	git push
 
-cdn-react:
-	$(call make_cdn,^react$$,\
-		https://unpkg.com/react@$${this.value}/umd/react.development.js,\
-		https://unpkg.com/react@$${this.value}/umd/react.production.js)
+publish:
+	cd src && make clean
+	cd src && PRODUCTION=1 make
+	cd src && make doc
+	npm publish
 
-cdn-react-dom:
-	$(call make_cdn,^react-dom$$,\
-		https://unpkg.com/react-dom@$${this.value}/umd/react-dom.development.js,\
-		https://unpkg.com/react-dom@$${this.value}/umd/react-dom.production.js)

@@ -1,6 +1,6 @@
 {
   "name": "react-zoomable-sunburst",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "description": "zoomable react sunburst",
   "main": "dist/sunburst.js",
   "scripts": {
@@ -26,8 +26,12 @@
     "d3-time": "^1.0.10",
     "d3-time-format": "^2.1.3",
     "d3-transition": "^1.1.3",
-    "react": "^16.6.3",
     "shallowequal": "^1.1.0"
+  },
+  "peerDependencies": {
+    "react": ">16.0.0",
+    "react-dom": ">16.0.0",
+    "prop-types": ">16.0.0"
   },
   "devDependencies": {
     "babel-eslint": "^8.2.6",
@@ -41,6 +45,6 @@
     "eslint": "^5.10.0",
     "eslint-plugin-import": "^2.14.0",
     "eslint-plugin-react": "^7.11.1",
-    "react-dom": "^16.6.3"
+    "react-docgen-readme": "0.0.1"
   }
 }

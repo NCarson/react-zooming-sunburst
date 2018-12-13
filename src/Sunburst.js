@@ -19,28 +19,58 @@ d3Transition;
  * text opacity -- https://gist.github.com/metmajer/5480307
 */
 
+/**
+* Creates a zoomable Sunburst
+* @param {object} props
+* @param {object} props.data - see d3 sunburst for example data shape 
+* @param {string} props.width - width of svg
+* @param {string} props.height - height of svg. 
+*   If width and height are not the same there will be dead space.
+* @param {number} props.count_member - what data element to use for slice size
+* @param {number} [props.radianCutoff=.01] - smallest slice to show in radians
+* @param {number} [props.transitionDuration=500] - ms for animation
+* @param {number} [props.saturation=.5] - base color saturation of slices
+* @param {number} [props.lightness=.5] - base color lightness of slices
+* @param {number} [props.child_brightness=.5] - value to lighten children slices
+* @param {number} [props.font_size=12] - for calculating if text fits
+* @param {func} [props.colorFunc=(node, current_color) => current_color]
+        - Custom color func for slices with heights > 0.
+* @param {func} [props.labelFunc] - returns text to slice
+* @param {func} [props.condensedLabelFunc] - backup function to try to fit less text
+        for smaller slices.
+* @param {func} [props.tooltipFunc=(data) => data.name]
+* @param {number} [props.tooltipX=20] - x pointer offset to show tooltip 
+* @param {number} [props.tooltipY=20] - y pionter offset to show tooltip
+* @param {string} [props.domID] - will be random if undefined
+* @param {func} [props.onMouseover]
+* @param {func} [props.onMouseout]
+* @param {func} [props.onClick]
+* @param {string} [props.key_member] - data member to construct dom ids from
+
+*/
+//FIXME normalize function signatures
+//FIXME normalize case
 class Sunburst extends React.Component {
 
     static propTypes = {
-        data: PropTypes.object.isRequired, // see d3 sunburst for example data shape
-        // if width and height are not the same there will be dead space
+        data: PropTypes.object.isRequired,
         width: PropTypes.string.isRequired,
         height: PropTypes.string.isRequired,
-        count_member: PropTypes.string.isRequired, // what data element to use for slice size
+        count_member: PropTypes.string.isRequired,
 
 		// requried /w/ default
-        tooltip: PropTypes.bool.isRequired,
-        tooltipFunc: PropTypes.func.isRequired,
-        sumFunc: PropTypes.func.isRequired, // what metric to use for slices
+        tooltip: PropTypes.bool.isRequired, // FIXME get rid of this
         radianCutoff: PropTypes.number.isRequired, // smallest slice to show in radians
         transitionDuration: PropTypes.number.isRequired, // ms for animation
-        colorFunc: PropTypes.func.isRequired, // custom colorizing for slice
-        tooltipX: PropTypes.number.isRequired, // offset x to place tooltip
-        tooltipY: PropTypes.number.isRequired, // ofset y to place tooltip
         saturation: PropTypes.number.isRequired, // base saturation of arcs
         lightness: PropTypes.number.isRequired, // base lightness of parent arcs
         child_brightness: PropTypes.number.isRequired, // value to lighten children
         font_size: PropTypes.number.isRequired, // for calculating if text fits
+
+        colorFunc: PropTypes.func, // custom colorizing for slice
+        tooltipFunc: PropTypes.func,
+        tooltipX: PropTypes.number.isRequired, // offset x to place tooltip
+        tooltipY: PropTypes.number.isRequired, // ofset y to place tooltip
 
         domId: PropTypes.string, // will be random if undefined
         onMouseover: PropTypes.func,
@@ -56,7 +86,6 @@ class Sunburst extends React.Component {
     static defaultProps = {
         tooltip: true,
         tooltipFunc: (data) => data.name,
-        sumFunc: (data) => data.size,
         radianCutoff: .001,
         transitionDuration: 500,
         colorFunc: (node, current_color) => current_color,
@@ -129,7 +158,11 @@ class Sunburst extends React.Component {
         this.props._debug && this.props._console.log("Sunburst: componentWillUnmount()")
         this._destroy_svg()
     }
-
+    /**
+     * Programatically select a slice.
+     * @param id the slice key to select. This should be the key_member set in
+     * props.
+    */
     select(id) {
         this.props._debug && this.props._console.log("Sunburst: select(id)")
         const key = '#mainArc-' + id
@@ -147,6 +180,10 @@ class Sunburst extends React.Component {
         this._last_click = node
     }
 
+/**
+ * recomputes slice colors. If the color function changes this should be called
+ * to update to the new color sheme.
+*/
     updateColor()  {
         this.props._debug && this.props._console.log("Sunburst: updateColor()")
         this.svg.selectAll('path.sunburst-main-arc')
@@ -381,7 +418,7 @@ class Sunburst extends React.Component {
         hue = this.hueDXScale(current.x0);
         const colorshift = thishsl.h + (hue / 4);
         const c = d3Hsl(colorshift, thishsl.s, thishsl.l)
-        return this.props.colorFunc(d, c)
+        return (this.props.colorFunc || this.props.colorFunc(d,c)) || c
     }
 
     // we have to render first then componentMounted will give us

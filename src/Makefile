@@ -46,12 +46,8 @@ TARGETS :=  $(UMD_TARGET)
 
 include $(BASE_DIR)/.makefiles/conf.makefile
 
-#  makes a dependency graph with dot
-#  https://github.com/lindenb/makefile2graph
-.PHONY: dot-graph
-dot-graph: $(TARGETS)
-	make -Bnd | make2graph | dot -Tsvg -o ../.dot-graph.svg
-
+docs: $(SRC_FILES)
+	documentation build $(SRC_FILES) -f html -o ../docs/api
 
 # XXX define your own rules AFTER the include
 # otherwise you will over write the default
