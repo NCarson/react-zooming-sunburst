@@ -21,5 +21,7 @@ publish:
 	cd src && make clean
 	cd src && PRODUCTION=1 make
 	cd src && make docs
+	npm version patch
 	npm publish
+	git push --tags
 

@@ -4,7 +4,7 @@
   "description": "zoomable react sunburst",
   "main": "dist/sunburst.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -42,9 +42,13 @@
     "babel-preset-react": "^6.24.1",
     "babel-runtime": "^6.26.0",
     "browserify-global-shim": "^1.0.3",
+    "enzyme": "^3.8.0",
     "eslint": "^5.10.0",
     "eslint-plugin-import": "^2.14.0",
     "eslint-plugin-react": "^7.11.1",
-    "react-docgen-readme": "0.0.1"
+    "jest": "^23.6.0",
+    "react-addons-test-utils": "^15.6.2",
+    "react-docgen-readme": "0.0.1",
+    "react-test-renderer": "^16.6.3"
   }
 }
